@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper functions ────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function userId() {
+      return request.auth.uid;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(userId())).data;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isGC() {
+      return hasRole('gc');
+    }
+
+    function isManager() {
+      return hasRole('manager');
+    }
+
+    function isWorker() {
+      return hasRole('worker');
+    }
+
+    function userCompanyId() {
+      return getUserData().companyId;
+    }
+
+    function userProjectIds() {
+      return getUserData().assignedProjectIds;
+    }
+
+    // ─── users collection ─────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Users can read their own document; admin reads all
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // Only the user themselves or admin can write
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // GC and managers can list users in their projects (needed for assignment)
+      allow list: if isAuthenticated() && (isAdmin() || isGC() || isManager());
+    }
+
+    // ─── companies collection ─────────────────────────────────────────────────
+    match /companies/{companyId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ─── projects collection ──────────────────────────────────────────────────
+    match /projects/{projectId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        isGC() ||
+        projectId in getUserData().assignedProjectIds ||
+        (isManager() && projectId in getUserData().assignedProjectIds)
+      );
+      allow write: if isAdmin() || isGC();
+    }
+
+    // ─── job_sites collection ─────────────────────────────────────────────────
+    match /job_sites/{siteId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        isGC() ||
+        siteId in getUserData().assignedSiteIds
+      );
+      allow write: if isAdmin() || isGC();
+    }
+
+    // ─── voice_memos collection ───────────────────────────────────────────────
+    match /voice_memos/{memoId} {
+      // Workers see their own memos; GC and managers see memos for their projects
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.createdBy == userId() ||
+        (isGC() && resource.data.projectId in getUserData().assignedProjectIds) ||
+        (isManager() && resource.data.projectId in getUserData().assignedProjectIds)
+      );
+      // Workers create memos; backend (admin SDK) updates them
+      allow create: if isAuthenticated();
+      allow update: if isAdmin() || resource.data.createdBy == userId();
+      allow delete: if isAdmin();
+    }
+
+    // ─── extracted_items collection ───────────────────────────────────────────
+    match /extracted_items/{itemId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        // GC sees blockers and schedule changes for their projects
+        (isGC() && resource.data.projectId in getUserData().assignedProjectIds) ||
+        // Managers see items for their company
+        (isManager() && resource.data.recipientCompanyIds.hasAny([userCompanyId()])) ||
+        // Workers see items assigned to them
+        (isWorker() && userId() in resource.data.recipientUserIds)
+      );
+      allow write: if isAdmin();
+    }
+
+    // ─── task_assignments collection ──────────────────────────────────────────
+    match /task_assignments/{taskId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.assignedToUserId == userId() ||
+        resource.data.assignedByUserId == userId() ||
+        (isGC() && resource.data.projectId in getUserData().assignedProjectIds) ||
+        (isManager() && resource.data.companyId == userCompanyId())
+      );
+      // Workers can update status of their own tasks
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.assignedToUserId == userId() ||
+        (isManager() && resource.data.companyId == userCompanyId())
+      );
+      allow create: if isAuthenticated() && (isAdmin() || isManager() || isGC());
+      allow delete: if isAdmin();
+    }
+
+    // ─── notifications collection ─────────────────────────────────────────────
+    match /notifications/{notificationId} {
+      // Users see only their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == userId();
+      allow update: if isAuthenticated() && resource.data.userId == userId();
+      allow write: if isAdmin();
+      allow delete: if isAuthenticated() && resource.data.userId == userId();
+    }
+
+    // ─── daily_digests collection ─────────────────────────────────────────────
+    match /daily_digests/{digestId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        isGC() ||
+        isManager()
+      );
+      allow write: if isAdmin();
+    }
+  }
+}
