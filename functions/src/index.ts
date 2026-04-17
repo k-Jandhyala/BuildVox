@@ -267,6 +267,7 @@ export const submitVoiceMemo = functions
         success: true,
         memoId,
         itemCount: extraction.items.length,
+        overallSummary: extraction.overall_summary,
       };
       jsonOk(res, out);
     } catch (err: any) {

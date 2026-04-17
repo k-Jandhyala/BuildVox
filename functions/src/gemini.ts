@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import { getGeminiApiKey, isDemoMode, GEMINI_MODEL, MAX_INLINE_AUDIO_BYTES } from "./config";
+import { getGeminiApiKey, isDemoMode, GEMINI_MODEL } from "./config";
 import { validateGeminiResponse } from "./validators";
 import { GeminiExtractionResult } from "./types";
 
@@ -74,12 +74,129 @@ Be specific and accurate in summaries. Do not invent information not in the audi
 
 // ─── Real Gemini integration path ─────────────────────────────────────────────
 
+const GEMINI_FILE_STATE_ACTIVE = "ACTIVE";
+const GEMINI_FILE_STATE_PROCESSING = "PROCESSING";
+const GEMINI_FILE_STATE_FAILED = "FAILED";
+const FILE_POLL_INTERVAL_MS = 2000;
+const FILE_POLL_TIMEOUT_MS = 60_000;
+
+interface GeminiFileResource {
+  name: string;
+  uri?: string;
+  mimeType?: string;
+  state?: {
+    name?: string;
+  };
+}
+
+async function uploadAudioToGeminiFiles(
+  apiKey: string,
+  audioBytes: Buffer,
+  mimeType: string
+): Promise<GeminiFileResource> {
+  const startResp = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: {
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(audioBytes.byteLength),
+        "X-Goog-Upload-Header-Content-Type": mimeType,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        file: {
+          display_name: `voice-memo-${Date.now()}`,
+        },
+      }),
+    }
+  );
+
+  if (!startResp.ok) {
+    const text = await startResp.text();
+    throw new Error(
+      `Gemini file upload start failed (${startResp.status}): ${text.substring(0, 200)}`
+    );
+  }
+
+  const uploadUrl = startResp.headers.get("x-goog-upload-url");
+  if (!uploadUrl) {
+    throw new Error("Gemini file upload URL missing from response headers.");
+  }
+
+  const finalizeResp = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize",
+      "Content-Type": mimeType,
+    },
+    body: audioBytes,
+  });
+
+  if (!finalizeResp.ok) {
+    const text = await finalizeResp.text();
+    throw new Error(
+      `Gemini file upload finalize failed (${finalizeResp.status}): ${text.substring(0, 200)}`
+    );
+  }
+
+  const finalizeJson = (await finalizeResp.json()) as unknown;
+  const uploaded =
+    finalizeJson &&
+    typeof finalizeJson === "object" &&
+    "file" in finalizeJson &&
+    (finalizeJson as { file?: GeminiFileResource }).file
+      ? (finalizeJson as { file: GeminiFileResource }).file
+      : (finalizeJson as GeminiFileResource);
+
+  if (!uploaded?.name) {
+    throw new Error("Gemini file upload returned no file name.");
+  }
+
+  return uploaded;
+}
+
+async function waitForGeminiFileReady(
+  apiKey: string,
+  fileName: string
+): Promise<GeminiFileResource> {
+  const startedAt = Date.now();
+  let latest: GeminiFileResource | null = null;
+
+  while (Date.now() - startedAt < FILE_POLL_TIMEOUT_MS) {
+    const pollResp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${encodeURIComponent(apiKey)}`
+    );
+    if (!pollResp.ok) {
+      const text = await pollResp.text();
+      throw new Error(
+        `Gemini file poll failed (${pollResp.status}): ${text.substring(0, 200)}`
+      );
+    }
+
+    latest = (await pollResp.json()) as GeminiFileResource;
+    const state = latest.state?.name || "";
+
+    if (state === GEMINI_FILE_STATE_ACTIVE) {
+      return latest;
+    }
+    if (state === GEMINI_FILE_STATE_FAILED) {
+      throw new Error("Gemini audio file processing failed.");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, FILE_POLL_INTERVAL_MS));
+  }
+
+  throw new Error(
+    `Timed out waiting for Gemini file processing (${fileName}).`
+  );
+}
+
 /**
- * REAL PATH: Downloads audio from provided URL, sends to Gemini,
- * returns validated structured extraction result.
- *
- * Tradeoff: inline base64 works for files up to ~20MB.
- * For larger files, use the Gemini Files API (not implemented in MVP).
+ * REAL PATH: Downloads audio from provided URL, uploads to Gemini Files API,
+ * waits for processing, and extracts structured action items.
  */
 export async function extractFromAudio(
   audioUrl: string,
@@ -100,21 +217,29 @@ export async function extractFromAudio(
     );
   }
 
-  const contentLengthHeader = response.headers.get("content-length");
-  const headerSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
   const buffer = Buffer.from(await response.arrayBuffer());
-  const fileSizeBytes = headerSize > 0 ? headerSize : buffer.byteLength;
+  console.log(`[Gemini] Downloaded audio (${buffer.byteLength} bytes)`);
 
-  if (fileSizeBytes > MAX_INLINE_AUDIO_BYTES) {
-    throw new Error(
-      `Audio file is too large (${fileSizeBytes} bytes). ` +
-      `Maximum supported size is ${MAX_INLINE_AUDIO_BYTES} bytes for inline processing. ` +
-      `Consider trimming the recording.`
-    );
+  console.log("[Gemini] Uploading audio to Gemini Files API...");
+  const uploadedFile = await uploadAudioToGeminiFiles(apiKey, buffer, mimeType);
+  const uploadedName = uploadedFile.name;
+  console.log(`[Gemini] Uploaded file: ${uploadedName}`);
+
+  const currentState = uploadedFile.state?.name || "";
+  const readyFile =
+    currentState === GEMINI_FILE_STATE_ACTIVE
+      ? uploadedFile
+      : currentState === GEMINI_FILE_STATE_PROCESSING || !currentState
+        ? await waitForGeminiFileReady(apiKey, uploadedName)
+        : (() => {
+            throw new Error(
+              `Gemini uploaded file is not usable (state: ${currentState}).`
+            );
+          })();
+
+  if (!readyFile.uri) {
+    throw new Error("Gemini file is ready but missing URI.");
   }
-
-  console.log(`[Gemini] Downloaded audio (${fileSizeBytes} bytes)`);
-  const base64Audio = buffer.toString("base64");
 
   // Call Gemini with structured output
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -127,9 +252,9 @@ export async function extractFromAudio(
   });
 
   const audioPart = {
-    inlineData: {
-      mimeType: mimeType,
-      data: base64Audio,
+    fileData: {
+      mimeType: readyFile.mimeType || mimeType,
+      fileUri: readyFile.uri,
     },
   };
 

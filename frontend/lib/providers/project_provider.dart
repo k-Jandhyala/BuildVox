@@ -20,19 +20,7 @@ final allProjectsProvider = FutureProvider<List<ProjectModel>>((ref) {
 
 /// The currently selected project ID (used on submit-memo screen, etc.)
 final StateProvider<String?> selectedProjectIdProvider =
-    StateProvider<String?>((ref) {
-  // Auto-select the first project when projects load
-  ref.listen(userProjectsProvider, (_, next) {
-    if (next.valueOrNull?.isNotEmpty == true) {
-      final current = ref.read(selectedProjectIdProvider);
-      if (current == null) {
-        ref.read(selectedProjectIdProvider.notifier).state =
-            next.valueOrNull!.first.id;
-      }
-    }
-  });
-  return null;
-    });
+    StateProvider<String?>((ref) => null);
 
 /// Sites for the currently selected project.
 final selectedProjectSitesProvider =
@@ -44,15 +32,4 @@ final selectedProjectSitesProvider =
 
 /// The currently selected site ID.
 final StateProvider<String?> selectedSiteIdProvider =
-    StateProvider<String?>((ref) {
-  ref.listen(selectedProjectSitesProvider, (_, next) {
-    if (next.valueOrNull?.isNotEmpty == true) {
-      final current = ref.read(selectedSiteIdProvider);
-      if (current == null) {
-        ref.read(selectedSiteIdProvider.notifier).state =
-            next.valueOrNull!.first.id;
-      }
-    }
-  });
-  return null;
-    });
+    StateProvider<String?>((ref) => null);

@@ -199,6 +199,7 @@ export interface SubmitVoiceMemoResponse {
   success: boolean;
   memoId: string;
   itemCount?: number;
+  overallSummary?: string;
   error?: string;
 }
 

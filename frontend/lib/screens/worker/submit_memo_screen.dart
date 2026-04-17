@@ -1,12 +1,13 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/project_provider.dart';
+import '../../services/audio_recording_service.dart';
 import '../../services/functions_service.dart';
 import '../../services/storage_service.dart';
 import '../../theme.dart';
@@ -21,23 +22,52 @@ class SubmitMemoScreen extends ConsumerStatefulWidget {
   ConsumerState<SubmitMemoScreen> createState() => _SubmitMemoScreenState();
 }
 
-class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
+class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen>
+    with WidgetsBindingObserver {
   final AudioRecorder _recorder = AudioRecorder();
   _MemoState _state = _MemoState.idle;
-  String? _recordingPath;
   File? _selectedFile;
   String _statusMessage = '';
+  String? _aiSummary;
   double _uploadProgress = 0;
   Duration _recordingDuration = Duration.zero;
   DateTime? _recordingStart;
+  StreamSubscription<Amplitude>? _amplitudeSub;
+  DateTime? _lastAmplitudeLogAt;
+  double _maxAmplitudeDb = -160.0;
+  bool _isEmulator = false;
 
   // State ticked by a periodic update during recording
   late final _ticker = Stream.periodic(const Duration(seconds: 1));
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _initRecordingEnvironment();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _amplitudeSub?.cancel();
     _recorder.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_state == _MemoState.recording &&
+        (state == AppLifecycleState.inactive ||
+            state == AppLifecycleState.paused)) {
+      _stopRecording().ignore();
+    }
+  }
+
+  Future<void> _initRecordingEnvironment() async {
+    final emulator = await AudioRecordingService.isAndroidEmulator();
+    if (!mounted) return;
+    setState(() => _isEmulator = emulator);
   }
 
   // ── Permission check ──────────────────────────────────────────────────────
@@ -59,21 +89,42 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
     final path =
         '${dir.path}/memo_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 128000,
-        sampleRate: 44100,
-      ),
+    final startedAt = DateTime.now();
+    await _recorder.start(AudioRecordingService.stableVoiceConfig, path: path);
+    AudioRecordingService.logStart(
+      flow: 'worker_submit_memo',
       path: path,
+      startedAt: startedAt,
+      isEmulator: _isEmulator,
     );
+    _amplitudeSub?.cancel();
+    _maxAmplitudeDb = -160.0;
+    _lastAmplitudeLogAt = null;
+    _amplitudeSub = _recorder
+        .onAmplitudeChanged(AudioRecordingService.amplitudeSampleInterval)
+        .listen((amp) {
+      final currentDb = amp.current;
+      if (currentDb > _maxAmplitudeDb) {
+        _maxAmplitudeDb = currentDb;
+      }
+      final now = DateTime.now();
+      if (_lastAmplitudeLogAt == null ||
+          now.difference(_lastAmplitudeLogAt!).inSeconds >= 2) {
+        _lastAmplitudeLogAt = now;
+        AudioRecordingService.logAmplitude(
+          flow: 'worker_submit_memo',
+          currentDb: currentDb,
+          maxDb: _maxAmplitudeDb,
+        );
+      }
+    });
 
     setState(() {
       _state = _MemoState.recording;
-      _recordingPath = path;
-      _recordingStart = DateTime.now();
+      _recordingStart = startedAt;
       _recordingDuration = Duration.zero;
       _selectedFile = null;
+      _statusMessage = _isEmulator ? AudioRecordingService.emulatorHintText() : '';
     });
 
     // Update duration counter
@@ -89,15 +140,34 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
 
   Future<void> _stopRecording() async {
     final path = await _recorder.stop();
+    final stoppedAt = DateTime.now();
+    await _amplitudeSub?.cancel();
+    _amplitudeSub = null;
+    await AudioRecordingService.logStop(
+      flow: 'worker_submit_memo',
+      startedAt: _recordingStart,
+      stoppedAt: stoppedAt,
+      path: path,
+      maxDb: _maxAmplitudeDb,
+    );
     if (path == null) {
       _showError('Recording failed — no audio captured.');
       setState(() => _state = _MemoState.idle);
       return;
     }
+
+    final trackedSeconds = _recordingStart == null
+        ? 0
+        : stoppedAt.difference(_recordingStart!).inSeconds;
+    final lowSignal = _maxAmplitudeDb < -45.0;
     setState(() {
-      _recordingPath = path;
       _selectedFile = File(path);
       _state = _MemoState.idle;
+      _statusMessage = lowSignal
+          ? 'Low microphone signal detected. If this is an emulator, test on a real device for reliable capture.'
+          : trackedSeconds > 0
+              ? 'Recorded ${trackedSeconds}s audio.'
+              : '';
     });
   }
 
@@ -114,7 +184,6 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
 
     setState(() {
       _selectedFile = File(filePath);
-      _recordingPath = filePath;
       _state = _MemoState.idle;
     });
   }
@@ -138,6 +207,7 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
     setState(() {
       _state = _MemoState.uploading;
       _statusMessage = 'Uploading audio…';
+      _aiSummary = null;
       _uploadProgress = 0;
     });
 
@@ -166,12 +236,15 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
 
       if (result['success'] == true) {
         final count = result['itemCount'] as int? ?? 0;
+        final summary = (result['overallSummary'] ?? result['overall_summary'])
+            ?.toString()
+            .trim();
         setState(() {
           _state = _MemoState.success;
           _statusMessage =
               'Done! Extracted $count action item${count != 1 ? 's' : ''}';
+          _aiSummary = (summary != null && summary.isNotEmpty) ? summary : null;
           _selectedFile = null;
-          _recordingPath = null;
         });
       } else {
         _showError(result['error'] as String? ?? 'Processing failed');
@@ -192,8 +265,8 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
     setState(() {
       _state = _MemoState.idle;
       _statusMessage = '';
+      _aiSummary = null;
       _selectedFile = null;
-      _recordingPath = null;
     });
   }
 
@@ -335,6 +408,11 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
                   style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 44)),
                   child: const Text('Try Again'),
                 ),
+              ],
+
+              if (_aiSummary != null && _aiSummary!.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _AiSummaryBox(summary: _aiSummary!),
               ],
 
               // ── Submit button ─────────────────────────────────────────────
@@ -586,6 +664,48 @@ class _StatusBanner extends StatelessWidget {
               message,
               style: TextStyle(
                   fontSize: 13, color: color, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiSummaryBox extends StatelessWidget {
+  final String summary;
+
+  const _AiSummaryBox({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: BVColors.primary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: BVColors.primary.withOpacity(0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AI Summary',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: BVColors.primary,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            summary,
+            style: const TextStyle(
+              fontSize: 13,
+              color: BVColors.onSurface,
+              height: 1.4,
             ),
           ),
         ],

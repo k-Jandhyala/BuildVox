@@ -30,6 +30,7 @@ dependencies:
   permission_handler: ^11.3.1
   uuid: ^4.4.2
   path: ^1.9.0
+  device_info_plus: ^12.4.0
 
 dev_dependencies:
   flutter_test:
