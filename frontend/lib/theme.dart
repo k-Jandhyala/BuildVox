@@ -6,6 +6,7 @@ class BVColors {
   BVColors._();
 
   static const Color primary = Color(0xFFF5A623);
+  static const Color onPrimary = Color(0xFF0F1923);
   static const Color primaryLight = Color(0xFFFFB840);
   static const Color accent = Color(0xFF2D9CDB);
   static const Color background = Color(0xFF0F1923);
