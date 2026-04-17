@@ -213,50 +213,67 @@ class _PlumberBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = (int i) => selectedIndex == i ? BVColors.primary : BVColors.textSecondary;
     return Container(
-      height: 86,
+      height: 102,
       decoration: const BoxDecoration(
         color: BVColors.surface,
         border: Border(top: BorderSide(color: BVColors.divider)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _item(Icons.home_outlined, 'Home', color(0), () => onSelect(0)),
-          _item(Icons.assignment_outlined, 'Tasks', color(1), () => onSelect(1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: _item(Icons.home_outlined, 'Home', color(0), () => onSelect(0)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: _item(Icons.assignment_outlined, 'Tasks', color(1), () => onSelect(1)),
+          ),
           GestureDetector(
             onTap: () => onSelect(2),
             child: Container(
-              width: 64,
-              height: 64,
+              width: 72,
+              height: 72,
               decoration: const BoxDecoration(
                 color: BVColors.primary,
                 shape: BoxShape.circle,
                 boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 14, offset: Offset(0, 8))],
               ),
-              child: const Icon(Icons.mic_rounded, size: 30, color: Colors.white),
+              child: const Icon(Icons.mic_rounded, size: 32, color: Colors.white),
             ),
           ),
-          Badge(
-            isLabelVisible: warningCount > 0,
-            label: Text('$warningCount'),
-            backgroundColor: BVColors.blocker,
-            child: _item(Icons.warning_amber_rounded, 'Warnings', color(3), () => onSelect(3)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Badge(
+              isLabelVisible: warningCount > 0,
+              label: Text('$warningCount'),
+              backgroundColor: BVColors.blocker,
+              child: _item(Icons.warning_amber_rounded, 'Warnings', color(3), () => onSelect(3)),
+            ),
           ),
-          _item(Icons.person_outline_rounded, 'Profile', color(4), () => onSelect(4)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: _item(Icons.person_outline_rounded, 'Profile', color(4), () => onSelect(4)),
+          ),
         ],
       ),
     );
   }
 
   Widget _item(IconData icon, String label, Color color, VoidCallback onTap) {
-    return InkWell(
+    return SizedBox(
+      width: 70,
+      child: InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 21),
-          Text(label, style: TextStyle(color: color, fontSize: 12)),
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)),
         ],
+      ),
       ),
     );
   }

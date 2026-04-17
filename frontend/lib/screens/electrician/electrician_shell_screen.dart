@@ -249,7 +249,7 @@ class _IndustrialBottomBarState extends State<_IndustrialBottomBar>
     ];
 
     return SizedBox(
-      height: 90,
+      height: 102,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -260,23 +260,26 @@ class _IndustrialBottomBarState extends State<_IndustrialBottomBar>
                 border: Border(top: BorderSide(color: BVColors.divider)),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   for (int i = 0; i < items.length; i++)
-                    _NavItem(
-                      icon: items[i].$1,
-                      label: items[i].$2,
-                      selected: widget.selectedIndex == (i >= 2 ? i + 1 : i),
-                      badgeCount: items[i].$2 == 'Warnings' ? widget.warningCount : 0,
-                      onTap: () => widget.onSelect(i >= 2 ? i + 1 : i),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: _NavItem(
+                        icon: items[i].$1,
+                        label: items[i].$2,
+                        selected: widget.selectedIndex == (i >= 2 ? i + 1 : i),
+                        badgeCount: items[i].$2 == 'Warnings' ? widget.warningCount : 0,
+                        onTap: () => widget.onSelect(i >= 2 ? i + 1 : i),
+                      ),
                     ),
                 ],
               ),
             ),
           ),
           Positioned(
-            top: -16,
-            left: MediaQuery.sizeOf(context).width / 2 - 32,
+            top: -22,
+            left: MediaQuery.sizeOf(context).width / 2 - 36,
             child: ScaleTransition(
               scale: _pulse,
               child: GestureDetector(
@@ -286,8 +289,8 @@ class _IndustrialBottomBarState extends State<_IndustrialBottomBar>
                   widget.onSelect(2);
                 },
                 child: Container(
-                  width: 64,
-                  height: 64,
+                  width: 72,
+                  height: 72,
                   decoration: BoxDecoration(
                     color: BVColors.primary,
                     shape: BoxShape.circle,
@@ -299,7 +302,7 @@ class _IndustrialBottomBarState extends State<_IndustrialBottomBar>
                       )
                     ],
                   ),
-                  child: const Icon(Icons.mic_rounded, size: 30, color: Colors.white),
+                  child: const Icon(Icons.mic_rounded, size: 32, color: Colors.white),
                 ),
               ),
             ),
@@ -328,11 +331,13 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = selected ? BVColors.primary : BVColors.textSecondary;
-    return Expanded(
+    return SizedBox(
+      width: 70,
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.only(top: 12, bottom: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -340,10 +345,13 @@ class _NavItem extends StatelessWidget {
                 isLabelVisible: badgeCount > 0,
                 backgroundColor: BVColors.blocker,
                 label: Text('$badgeCount'),
-                child: Icon(icon, size: 21, color: color),
+                child: Icon(icon, size: 24, color: color),
               ),
-              const SizedBox(height: 2),
-              Text(label, style: TextStyle(color: color, fontSize: 12)),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
             ],
           ),
         ),
