@@ -1,6 +1,7 @@
 # Firebase secrets — NEVER commit these
 .firebaserc.local
 functions/.env
+functions/.env.example
 functions/lib/
 frontend/android/app/google-services.json
 frontend/lib/firebase_options.dart
