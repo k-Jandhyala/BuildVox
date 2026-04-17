@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../models/electrician_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
+import '../../theme.dart';
+import '../../widgets/skeleton_shimmer.dart';
 
 class ElectricianHomeScreen extends ConsumerWidget {
   const ElectricianHomeScreen({super.key});
@@ -36,39 +38,71 @@ class ElectricianHomeScreen extends ConsumerWidget {
         if (summary != null)
           GridView.count(
             crossAxisCount: 2,
-            childAspectRatio: 1.5,
+            childAspectRatio: 1.35,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
             children: [
               _StatCard('High Priority', '${summary.highPriorityCount}',
-                  const Icon(Icons.priority_high_rounded)),
+                  icon: Icons.priority_high_rounded, accent: BVColors.primary),
               _StatCard('Blockers', '${summary.blockerCount}',
-                  const Icon(Icons.block_rounded)),
+                  icon: Icons.block_rounded, accent: BVColors.blocker),
               _StatCard('Due Today', '${summary.dueTodayCount}',
-                  const Icon(Icons.today_rounded)),
+                  icon: Icons.today_rounded, accent: BVColors.accent),
               _StatCard('Material Pending', '${summary.materialPendingCount}',
-                  const Icon(Icons.inventory_2_rounded)),
+                  icon: Icons.inventory_2_rounded, accent: BVColors.done),
             ],
-          ),
+          )
+        else
+          const SkeletonShimmer(height: 230),
         const SizedBox(height: 16),
         _SectionTitle(
           title: 'Quick Actions',
           actionLabel: null,
           onAction: null,
         ),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
+        GridView.count(
+          crossAxisCount: 2,
+          childAspectRatio: 2.2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
           children: const [
             _QuickActionChip(icon: Icons.edit_note_rounded, label: 'Add Update'),
             _QuickActionChip(icon: Icons.inventory_2_rounded, label: 'Request Materials'),
             _QuickActionChip(icon: Icons.assignment_late_rounded, label: 'Raise Work Order'),
-            _QuickActionChip(icon: Icons.report_problem_rounded, label: 'Flag Blocker'),
+            _QuickActionChip(
+                icon: Icons.report_problem_rounded, label: 'Flag Blocker', danger: true),
+            _QuickActionChip(icon: Icons.map_outlined, label: 'View Site Plan'),
           ],
         ),
         const SizedBox(height: 16),
+        _SectionTitle(
+          title: 'Site Warnings',
+          actionLabel: warnings.isEmpty ? null : 'Open',
+          onAction: warnings.isEmpty ? null : () {},
+        ),
+        if (warnings.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: BVColors.done.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: BVColors.done.withValues(alpha: 0.5)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.check_circle_outline_rounded, color: BVColors.done),
+                SizedBox(width: 8),
+                Text('All clear - no active warnings'),
+              ],
+            ),
+          )
+        else
+          ...warnings.take(3).map((w) => _WarningPreviewCard(warning: w)),
+        const SizedBox(height: 10),
         _SectionTitle(
           title: 'Assigned to Me',
           actionLabel: 'View all',
@@ -78,16 +112,8 @@ class ElectricianHomeScreen extends ConsumerWidget {
           if (entry.value.isEmpty) return const SizedBox.shrink();
           return _PrioritySection(priority: entry.key, tasks: entry.value);
         }),
-        const SizedBox(height: 10),
-        _SectionTitle(
-          title: 'Site Warnings',
-          actionLabel: warnings.isEmpty ? null : 'Open',
-          onAction: warnings.isEmpty ? null : () {},
-        ),
-        if (warnings.isEmpty)
-          const _EmptyDarkCard(message: 'No active site warnings.')
-        else
-          ...warnings.take(3).map((w) => _WarningPreviewCard(warning: w)),
+        if (tasks.isEmpty)
+          const _EmptyDarkCard(message: 'No tasks assigned yet'),
       ],
     );
   }
@@ -162,30 +188,34 @@ class _PrioritySection extends StatelessWidget {
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
-  final Widget icon;
-  const _StatCard(this.label, this.value, this.icon);
+  final IconData icon;
+  final Color accent;
+  const _StatCard(this.label, this.value, {required this.icon, required this.accent});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827),
+        color: BVColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1F2937)),
+        border: Border(left: BorderSide(color: accent, width: 4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconTheme(
-            data: const IconThemeData(color: Color(0xFF60A5FA)),
-            child: icon,
+          Container(
+            width: 30,
+            height: 30,
+            decoration:
+                BoxDecoration(color: accent.withValues(alpha: 0.2), shape: BoxShape.circle),
+            child: Icon(icon, size: 18, color: accent),
           ),
           const Spacer(),
           Text(
             value,
             style: const TextStyle(
-                color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+                color: Colors.white, fontSize: 34, fontWeight: FontWeight.w700),
           ),
           Text(label, style: const TextStyle(color: Color(0xFF94A3B8))),
         ],
@@ -218,23 +248,31 @@ class _SectionTitle extends StatelessWidget {
 class _QuickActionChip extends StatelessWidget {
   final IconData icon;
   final String label;
-  const _QuickActionChip({required this.icon, required this.label});
+  final bool danger;
+  const _QuickActionChip({required this.icon, required this.label, this.danger = false});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF334155)),
+        color: BVColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: danger ? BVColors.blocker : BVColors.divider),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF93C5FD)),
+          Icon(icon, size: 22, color: danger ? BVColors.blocker : BVColors.primary),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white)),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: danger ? BVColors.blocker : Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
       ),
     );

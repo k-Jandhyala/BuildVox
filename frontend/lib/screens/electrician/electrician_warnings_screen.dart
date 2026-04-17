@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/electrician_models.dart';
 import '../../providers/electrician_provider.dart';
+import '../../theme.dart';
 
 class ElectricianWarningsScreen extends ConsumerWidget {
   const ElectricianWarningsScreen({super.key});
@@ -15,20 +16,33 @@ class ElectricianWarningsScreen extends ConsumerWidget {
       grouped[c] = warnings.where((w) => w.category == c).toList();
     }
 
+    const tabs = [
+      WarningCategory.safety,
+      WarningCategory.inspection,
+      WarningCategory.materialShortage,
+      WarningCategory.schedule,
+    ];
     return DefaultTabController(
-      length: WarningCategory.values.length,
+      length: tabs.length,
       child: Column(
         children: [
           TabBar(
             isScrollable: true,
+            indicatorColor: BVColors.primary,
             tabs: [
-              for (final c in WarningCategory.values) Tab(text: c.name),
+              for (final c in tabs)
+                Tab(
+                  text: c.name.replaceAllMapped(
+                    RegExp(r'([A-Z])'),
+                    (m) => ' ${m.group(1)}',
+                  ).trim(),
+                ),
             ],
           ),
           Expanded(
             child: TabBarView(
               children: [
-                for (final c in WarningCategory.values)
+                for (final c in tabs)
                   _WarningList(warnings: grouped[c] ?? const [])
               ],
             ),
@@ -47,7 +61,14 @@ class _WarningList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (warnings.isEmpty) {
       return const Center(
-        child: Text('No active site warnings', style: TextStyle(color: Color(0xFF94A3B8))),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.shield_outlined, color: BVColors.done, size: 34),
+            SizedBox(height: 8),
+            Text('No active safety warnings', style: TextStyle(color: BVColors.textSecondary)),
+          ],
+        ),
       );
     }
     return ListView.builder(
@@ -60,7 +81,7 @@ class _WarningList extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF111827),
+            color: BVColors.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color.withValues(alpha: 0.75)),
           ),
@@ -82,10 +103,33 @@ class _WarningList extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(w.description, style: const TextStyle(color: Color(0xFFCBD5E1))),
+              const SizedBox(height: 8),
+              const Row(
+                children: [
+                  _ActionButton(label: 'Acknowledge'),
+                  SizedBox(width: 8),
+                  _ActionButton(label: 'View Details'),
+                ],
+              ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final String label;
+  const _ActionButton({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: OutlinedButton(
+        onPressed: () {},
+        child: Text(label),
+      ),
     );
   }
 }

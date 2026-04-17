@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../models/electrician_models.dart';
 import '../../models/extracted_item_model.dart';
 import '../../providers/electrician_provider.dart';
+import '../../theme.dart';
 
 class ElectricianTasksScreen extends ConsumerStatefulWidget {
   const ElectricianTasksScreen({super.key});
@@ -55,17 +56,27 @@ class _ElectricianTasksScreenState extends ConsumerState<ElectricianTasksScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text(
-          'Task Queue',
-          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+        Text(
+          'My Tasks (${filtered.length})',
+          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
+            ChoiceChip(
+              label: const Text('All'),
+              selected: !_dueTodayOnly && !_blockersOnly && !_materialOnly && _statusFilter == null,
+              onSelected: (_) => setState(() {
+                _dueTodayOnly = false;
+                _blockersOnly = false;
+                _materialOnly = false;
+                _statusFilter = null;
+              }),
+            ),
             FilterChip(
-              label: const Text('Due today'),
+              label: const Text('Due Today'),
               selected: _dueTodayOnly,
               onSelected: (v) => setState(() => _dueTodayOnly = v),
             ),
@@ -75,9 +86,19 @@ class _ElectricianTasksScreenState extends ConsumerState<ElectricianTasksScreen>
               onSelected: (v) => setState(() => _blockersOnly = v),
             ),
             FilterChip(
-              label: const Text('Material related'),
+              label: const Text('Material Related'),
               selected: _materialOnly,
               onSelected: (v) => setState(() => _materialOnly = v),
+            ),
+            ChoiceChip(
+              label: const Text('In Progress'),
+              selected: _statusFilter == ItemStatus.inProgress,
+              onSelected: (_) => setState(() => _statusFilter = ItemStatus.inProgress),
+            ),
+            ChoiceChip(
+              label: const Text('Completed'),
+              selected: _statusFilter == ItemStatus.done,
+              onSelected: (_) => setState(() => _statusFilter = ItemStatus.done),
             ),
             PopupMenuButton<ItemStatus?>(
               onSelected: (v) => setState(() => _statusFilter = v),
@@ -96,7 +117,7 @@ class _ElectricianTasksScreenState extends ConsumerState<ElectricianTasksScreen>
         ),
         const SizedBox(height: 14),
         if (filtered.isEmpty)
-          const _EmptyCard(text: 'No tasks at this jobsite with current filters.')
+          const _EmptyCard(text: 'No tasks match this filter')
         else
           ...grouped.entries.map((entry) {
             if (entry.value.isEmpty) return const SizedBox.shrink();
@@ -141,35 +162,73 @@ class _TaskCard extends StatelessWidget {
     return InkWell(
       onTap: () => context.push('/${task.item.trade == 'plumbing' ? 'plumber' : 'electrician'}/task/${task.assignment.id}',
           extra: {'extractedItemId': task.item.id}),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF111827),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF1F2937)),
+      child: Dismissible(
+        key: ValueKey(task.assignment.id),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: BVColors.done.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _SwipeAction(label: 'Complete', color: BVColors.done),
+              SizedBox(width: 10),
+              _SwipeAction(label: 'Flag', color: BVColors.blocker),
+            ],
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              task.item.normalizedSummary,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _meta(task.assignment.status.label),
-                _meta(task.item.urgency.label),
-                _meta(task.item.unitOrArea ?? 'No location'),
-                _meta('Assigned by ${task.assignedByLabel}'),
-                _meta(due == null ? 'No due date' : DateFormat('MMM d').format(due)),
-              ],
-            ),
-          ],
+        confirmDismiss: (_) async => false,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: BVColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: BVColors.divider),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: task.item.urgency.color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.item.normalizedSummary,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _meta(task.assignment.status.label),
+                        _meta(task.item.trade),
+                        _meta(due == null
+                            ? 'No due date'
+                            : DateFormat('MMM d, h:mm a').format(due)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: BVColors.textSecondary),
+            ],
+          ),
         ),
       ),
     );
@@ -196,10 +255,34 @@ class _EmptyCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827),
+        color: BVColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(text, style: const TextStyle(color: Color(0xFF94A3B8))),
+      child: const Column(
+        children: [
+          Icon(Icons.construction_rounded, color: BVColors.textSecondary, size: 36),
+          SizedBox(height: 8),
+          Text('No tasks match this filter', style: TextStyle(color: BVColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SwipeAction extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _SwipeAction({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
     );
   }
 }

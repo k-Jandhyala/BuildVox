@@ -14,6 +14,7 @@ import '../../models/job_site_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
+import '../../theme.dart';
 
 enum RecordUiState {
   idle,
@@ -39,6 +40,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
   String? _recordedPath;
   List<String> _photos = [];
   String _status = 'Tap to start recording';
+  DateTime? _startedAt;
 
   @override
   void dispose() {
@@ -65,6 +67,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
           _recordedPath = path;
           _state = RecordUiState.idle;
           _status = 'Recording captured. Process with AI.';
+          _startedAt = null;
         });
       }
       return;
@@ -82,6 +85,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     setState(() {
       _state = RecordUiState.recording;
       _status = 'Recording... tap again to stop';
+      _startedAt = DateTime.now();
     });
   }
 
@@ -180,6 +184,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     final queue = ref.watch(electricianQueueProvider).valueOrNull ?? const [];
     final queuedCount = queue.where((e) => e.status != QueueStatus.completed).length;
 
+    final recent = queue.take(3).toList();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -197,14 +202,24 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
         if (queuedCount > 0) ...[
           const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
+              color: BVColors.primary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: BVColors.primary.withValues(alpha: 0.4)),
             ),
-            child: Text(
-              'Offline queue: $queuedCount pending submission(s)',
-              style: const TextStyle(color: Color(0xFFBFDBFE)),
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_off_rounded, color: BVColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Offline queue: $queuedCount pending submission(s)',
+                    style: const TextStyle(color: BVColors.onSurface),
+                  ),
+                ),
+                const Icon(Icons.close_rounded, color: BVColors.textSecondary),
+              ],
             ),
           )
         ],
@@ -213,26 +228,45 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
           child: InkWell(
             onTap: _toggleRecord,
             borderRadius: BorderRadius.circular(90),
-            child: Container(
-              width: 180,
-              height: 180,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 136,
+              height: 136,
               decoration: BoxDecoration(
-                color: _state == RecordUiState.recording
-                    ? const Color(0xFFDC2626)
-                    : const Color(0xFF2563EB),
+                gradient: RadialGradient(
+                  colors: _state == RecordUiState.recording
+                      ? const [Color(0xFFE5383B), Color(0xFFB91C1C)]
+                      : const [Color(0xFFF5A623), Color(0xFFE8940A)],
+                ),
                 shape: BoxShape.circle,
                 boxShadow: const [
-                  BoxShadow(color: Colors.black45, blurRadius: 20, spreadRadius: 2),
+                  BoxShadow(color: Colors.black54, blurRadius: 24, spreadRadius: 2),
                 ],
               ),
               child: Icon(
                 _state == RecordUiState.recording ? Icons.stop_rounded : Icons.mic_rounded,
                 color: Colors.white,
-                size: 72,
+                size: 60,
               ),
             ),
           ),
         ),
+        if (_state == RecordUiState.recording && _startedAt != null) ...[
+          const SizedBox(height: 12),
+          StreamBuilder<int>(
+            stream: Stream.periodic(const Duration(seconds: 1), (x) => x),
+            builder: (_, __) {
+              final d = DateTime.now().difference(_startedAt!);
+              final mm = d.inMinutes.toString().padLeft(2, '0');
+              final ss = (d.inSeconds % 60).toString().padLeft(2, '0');
+              return Text(
+                '$mm:$ss',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+              );
+            },
+          ),
+        ],
         const SizedBox(height: 16),
         Text(_status, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
         const SizedBox(height: 16),
@@ -263,8 +297,53 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
         ElevatedButton.icon(
           onPressed: _state == RecordUiState.processing ? null : _process,
           icon: const Icon(Icons.auto_awesome_rounded),
-          label: const Text('Process with AI and Review'),
+          label: const Text('✦ Process & Submit'),
         ),
+        const SizedBox(height: 20),
+        const Text(
+          'Recent Recordings',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        if (recent.isEmpty)
+          const Text('No recent recordings', style: TextStyle(color: BVColors.textSecondary))
+        else
+          ...recent.map((q) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: BVColors.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: BVColors.divider),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Memo ${q.createdAt.hour}:${q.createdAt.minute.toString().padLeft(2, '0')}',
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: q.status == QueueStatus.completed
+                            ? BVColors.done.withValues(alpha: 0.2)
+                            : q.status == QueueStatus.failed
+                                ? BVColors.blocker.withValues(alpha: 0.2)
+                                : BVColors.primary.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        q.status == QueueStatus.completed
+                            ? 'Processed'
+                            : q.status == QueueStatus.failed
+                                ? 'Failed'
+                                : 'Pending',
+                      ),
+                    )
+                  ],
+                ),
+              )),
       ],
     );
   }

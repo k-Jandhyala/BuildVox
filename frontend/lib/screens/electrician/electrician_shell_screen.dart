@@ -31,10 +31,22 @@ class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen>
         queue.where((q) => q.status != QueueStatus.completed).length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1220),
+      backgroundColor: BVColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        title: const Text('BuildVox  ·  Electrician'),
+        title: Row(
+          children: [
+            const Text('BuildVox'),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: BVColors.primary.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Text('Electrician'),
+            ),
+          ],
+        ),
         actions: const [AccountMenuButton()],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(72),
@@ -44,7 +56,7 @@ class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen>
               loading: () => const LinearProgressIndicator(minHeight: 3),
               error: (e, _) => Text(
                 'Failed to load jobsites: $e',
-                style: const TextStyle(color: Colors.redAccent),
+                style: const TextStyle(color: BVColors.blocker),
               ),
               data: (sites) {
                 if (sites.isEmpty) {
@@ -52,7 +64,7 @@ class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen>
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: BVColors.surface,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Text(
@@ -76,27 +88,50 @@ class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen>
                     );
                   });
                 }
-                return DropdownButtonFormField<String>(
-                  initialValue: selected,
-                  dropdownColor: const Color(0xFF0F172A),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Current Jobsite',
-                    labelStyle: TextStyle(color: Color(0xFF94A3B8)),
-                    fillColor: Color(0xFF1E293B),
+                final currentSite = sites.firstWhere((s) => s.id == selected);
+                return InkWell(
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: BVColors.surface,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    builder: (ctx) => _JobsiteSheet(
+                      sites: sites,
+                      selectedSiteId: selected,
+                      onSelect: (id) {
+                        ref.read(selectedElectricianSiteProvider.notifier).setSite(id);
+                        Navigator.of(ctx).pop();
+                      },
+                    ),
                   ),
-                  items: [
-                    for (final s in sites)
-                      DropdownMenuItem<String>(
-                        value: s.id,
-                        child: Text('${s.name} · ${s.address}',
-                            overflow: TextOverflow.ellipsis),
-                      )
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    ref.read(selectedElectricianSiteProvider.notifier).setSite(v);
-                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: BVColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: BVColors.primary),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, color: BVColors.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '${currentSite.name} · ${currentSite.address}',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.expand_more_rounded),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),
@@ -113,28 +148,205 @@ class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen>
           ElectricianProfileScreen(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _IndustrialBottomBar(
         selectedIndex: _tab,
-        onDestinationSelected: (v) => setState(() => _tab = v),
-        backgroundColor: const Color(0xFF0F172A),
-        indicatorColor: BVColors.primary.withValues(alpha: 0.25),
-        destinations: [
-          const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-          const NavigationDestination(
-              icon: Icon(Icons.assignment_outlined), label: 'Tasks'),
-          const NavigationDestination(
-              icon: Icon(Icons.mic_rounded), label: 'Record'),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: queuedCount > 0,
-              label: Text('$queuedCount'),
-              child: const Icon(Icons.warning_amber_rounded),
+        warningCount: queuedCount,
+        onSelect: (index) => setState(() => _tab = index),
+      ),
+    );
+  }
+}
+
+class _JobsiteSheet extends StatelessWidget {
+  final dynamic sites;
+  final String? selectedSiteId;
+  final ValueChanged<String> onSelect;
+
+  const _JobsiteSheet({
+    required this.sites,
+    required this.selectedSiteId,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: BVColors.divider,
+                borderRadius: BorderRadius.circular(999),
+              ),
             ),
-            label: 'Warnings',
+            const SizedBox(height: 14),
+            ...sites.map<Widget>((s) {
+              final selected = s.id == selectedSiteId;
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                leading: Icon(
+                  Icons.location_on_outlined,
+                  color: selected ? BVColors.primary : BVColors.textSecondary,
+                ),
+                title: Text(s.name),
+                subtitle: Text(s.address),
+                trailing: selected
+                    ? const Icon(Icons.check_circle_rounded, color: BVColors.primary)
+                    : null,
+                onTap: () => onSelect(s.id as String),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IndustrialBottomBar extends StatefulWidget {
+  final int selectedIndex;
+  final int warningCount;
+  final ValueChanged<int> onSelect;
+
+  const _IndustrialBottomBar({
+    required this.selectedIndex,
+    required this.warningCount,
+    required this.onSelect,
+  });
+
+  @override
+  State<_IndustrialBottomBar> createState() => _IndustrialBottomBarState();
+}
+
+class _IndustrialBottomBarState extends State<_IndustrialBottomBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+    lowerBound: 0.95,
+    upperBound: 1,
+    value: 1,
+  );
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      (Icons.home_outlined, 'Home'),
+      (Icons.assignment_outlined, 'Tasks'),
+      (Icons.warning_amber_rounded, 'Warnings'),
+      (Icons.person_outline_rounded, 'Profile'),
+    ];
+
+    return SizedBox(
+      height: 90,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                color: BVColors.surface,
+                border: Border(top: BorderSide(color: BVColors.divider)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  for (int i = 0; i < items.length; i++)
+                    _NavItem(
+                      icon: items[i].$1,
+                      label: items[i].$2,
+                      selected: widget.selectedIndex == (i >= 2 ? i + 1 : i),
+                      badgeCount: items[i].$2 == 'Warnings' ? widget.warningCount : 0,
+                      onTap: () => widget.onSelect(i >= 2 ? i + 1 : i),
+                    ),
+                ],
+              ),
+            ),
           ),
-          const NavigationDestination(
-              icon: Icon(Icons.person_outline_rounded), label: 'Profile'),
+          Positioned(
+            top: -16,
+            left: MediaQuery.sizeOf(context).width / 2 - 32,
+            child: ScaleTransition(
+              scale: _pulse,
+              child: GestureDetector(
+                onTapDown: (_) => _pulse.reverse(),
+                onTapUp: (_) {
+                  _pulse.forward();
+                  widget.onSelect(2);
+                },
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: BVColors.primary,
+                    shape: BoxShape.circle,
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black54,
+                        blurRadius: 14,
+                        offset: Offset(0, 8),
+                      )
+                    ],
+                  ),
+                  child: const Icon(Icons.mic_rounded, size: 30, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final int badgeCount;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.badgeCount,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? BVColors.primary : BVColors.textSecondary;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Badge(
+                isLabelVisible: badgeCount > 0,
+                backgroundColor: BVColors.blocker,
+                label: Text('$badgeCount'),
+                child: Icon(icon, size: 21, color: color),
+              ),
+              const SizedBox(height: 2),
+              Text(label, style: TextStyle(color: color, fontSize: 12)),
+            ],
+          ),
+        ),
       ),
     );
   }
