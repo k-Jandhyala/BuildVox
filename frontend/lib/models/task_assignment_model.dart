@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'extracted_item_model.dart';
 
 class TaskAssignmentModel {
@@ -28,21 +27,26 @@ class TaskAssignmentModel {
     this.updatedAt,
   });
 
-  factory TaskAssignmentModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory TaskAssignmentModel.fromJson(Map<String, dynamic> json) {
     return TaskAssignmentModel(
-      id: doc.id,
-      extractedItemId: data['extractedItemId'] as String? ?? '',
-      assignedToUserId: data['assignedToUserId'] as String? ?? '',
-      assignedByUserId: data['assignedByUserId'] as String? ?? '',
-      companyId: data['companyId'] as String? ?? '',
-      projectId: data['projectId'] as String? ?? '',
-      siteId: data['siteId'] as String? ?? '',
-      status: ItemStatus.fromString(data['status'] as String?),
-      dueDate: (data['dueDate'] as Timestamp?)?.toDate(),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      id: json['id'] as String? ?? '',
+      extractedItemId: json['extracted_item_id'] as String? ?? '',
+      assignedToUserId: json['assigned_to_user_id'] as String? ?? '',
+      assignedByUserId: json['assigned_by_user_id'] as String? ?? '',
+      companyId: json['company_id'] as String? ?? '',
+      projectId: json['project_id'] as String? ?? '',
+      siteId: json['site_id'] as String? ?? '',
+      status: ItemStatus.fromString(json['status'] as String?),
+      dueDate: _parse(json['due_date']),
+      createdAt: _parse(json['created_at']),
+      updatedAt: _parse(json['updated_at']),
     );
+  }
+
+  static DateTime? _parse(dynamic v) {
+    if (v == null) return null;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
   }
 
   TaskAssignmentModel copyWith({ItemStatus? status}) {

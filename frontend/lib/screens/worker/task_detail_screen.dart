@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../models/extracted_item_model.dart';
 import '../../models/task_assignment_model.dart';
-import '../../services/firestore_service.dart';
+import '../../services/database_service.dart';
 import '../../services/functions_service.dart';
 import '../../theme.dart';
+import '../../widgets/account_menu_button.dart';
 import '../../widgets/tier_badge.dart';
 import '../../widgets/urgency_chip.dart';
 import '../../widgets/loading_overlay.dart';
@@ -40,7 +41,7 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
   Future<void> _loadData() async {
     try {
       final results = await Future.wait([
-        FirestoreService.getExtractedItem(widget.extractedItemId),
+        DatabaseService.getExtractedItem(widget.extractedItemId),
       ]);
       // Also watch task via stream for live status updates
       setState(() {
@@ -102,7 +103,10 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Task Detail')),
+      appBar: AppBar(
+        title: const Text('Task Detail'),
+        actions: const [AccountMenuButton()],
+      ),
       body: Stack(
         children: [
           if (_loading)

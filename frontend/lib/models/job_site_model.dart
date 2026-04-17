@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class JobSiteModel {
   final String id;
   final String projectId;
@@ -17,15 +15,20 @@ class JobSiteModel {
     this.createdAt,
   });
 
-  factory JobSiteModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory JobSiteModel.fromJson(Map<String, dynamic> json) {
     return JobSiteModel(
-      id: doc.id,
-      projectId: data['projectId'] as String? ?? '',
-      name: data['name'] as String? ?? '',
-      address: data['address'] as String? ?? '',
-      activeTrades: List<String>.from(data['activeTrades'] as List? ?? []),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      id: json['id'] as String? ?? '',
+      projectId: json['project_id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      address: json['address'] as String? ?? '',
+      activeTrades: List<String>.from(json['active_trades'] as List? ?? []),
+      createdAt: _parse(json['created_at']),
     );
+  }
+
+  static DateTime? _parse(dynamic v) {
+    if (v == null) return null;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
   }
 }

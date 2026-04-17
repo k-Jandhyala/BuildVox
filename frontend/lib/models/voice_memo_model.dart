@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 enum ProcessingStatus { pending, processing, completed, failed }
 
 class VoiceMemoModel {
@@ -27,20 +25,26 @@ class VoiceMemoModel {
     this.errorMessage,
   });
 
-  factory VoiceMemoModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory VoiceMemoModel.fromJson(Map<String, dynamic> json) {
     return VoiceMemoModel(
-      id: doc.id,
-      createdBy: data['createdBy'] as String? ?? '',
-      projectId: data['projectId'] as String? ?? '',
-      siteId: data['siteId'] as String? ?? '',
-      storagePath: data['storagePath'] as String? ?? '',
-      processingStatus: _parseStatus(data['processingStatus'] as String?),
-      overallSummary: data['overallSummary'] as String?,
-      detectedLanguage: data['detectedLanguage'] as String?,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-      errorMessage: data['errorMessage'] as String?,
+      id: json['id'] as String? ?? '',
+      createdBy: json['created_by'] as String? ?? '',
+      projectId: json['project_id'] as String? ?? '',
+      siteId: json['site_id'] as String? ?? '',
+      storagePath: json['storage_path'] as String? ?? '',
+      processingStatus:
+          _parseStatus(json['processing_status'] as String?),
+      overallSummary: json['overall_summary'] as String?,
+      detectedLanguage: json['detected_language'] as String?,
+      createdAt: _parse(json['created_at']),
+      errorMessage: json['error_message'] as String?,
     );
+  }
+
+  static DateTime? _parse(dynamic v) {
+    if (v == null) return null;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
   }
 
   static ProcessingStatus _parseStatus(String? value) {

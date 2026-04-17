@@ -6,7 +6,7 @@ import '../../models/extracted_item_model.dart';
 import '../../models/task_assignment_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/extracted_items_provider.dart';
-import '../../services/firestore_service.dart';
+import '../../services/database_service.dart';
 import '../../theme.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_overlay.dart';
@@ -100,7 +100,7 @@ class _TaskTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return FutureBuilder<ExtractedItemModel?>(
-      future: FirestoreService.getExtractedItem(task.extractedItemId),
+      future: DatabaseService.getExtractedItem(task.extractedItemId),
       builder: (context, snapshot) {
         final item = snapshot.data;
 

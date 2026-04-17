@@ -6,6 +6,11 @@ import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/worker/worker_home.dart';
 import 'screens/worker/task_detail_screen.dart';
+import 'screens/electrician/ai_review_screen.dart';
+import 'screens/electrician/electrician_shell_screen.dart';
+import 'screens/electrician/electrician_task_detail_screen.dart';
+import 'screens/plumber/plumber_shell_screen.dart';
+import 'screens/plumber/plumber_task_detail_screen.dart';
 import 'screens/gc/gc_home.dart';
 import 'screens/manager/manager_home.dart';
 import 'screens/admin/admin_home.dart';
@@ -17,30 +22,28 @@ const String kRouteGc = '/gc';
 const String kRouteManager = '/manager';
 const String kRouteAdmin = '/admin';
 const String kRouteTaskDetail = '/task/:taskId';
+const String kRouteElectrician = '/electrician';
+const String kRoutePlumber = '/plumber';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authNotifier = ref.watch(firebaseAuthProvider);
-
   return GoRouter(
     initialLocation: '/login',
     refreshListenable: RouterRefreshNotifier(ref),
     redirect: (context, state) {
-      final authValue = ref.read(firebaseAuthProvider);
-      final isSignedIn = authValue.valueOrNull != null;
+      final session = ref.read(supabaseSessionProvider).valueOrNull;
+      final isSignedIn = session != null;
       final isLoginRoute = state.uri.path == '/login';
 
-      // Not signed in → send to login
       if (!isSignedIn) {
         return isLoginRoute ? null : '/login';
       }
 
-      // Signed in but on login page → route to role-appropriate home
       if (isSignedIn && isLoginRoute) {
         final userProfile = ref.read(currentUserProvider);
-        return _homeRouteForRole(userProfile?.role);
+        return _homeRouteForUser(userProfile);
       }
 
-      return null; // no redirect
+      return null;
     },
     routes: [
       GoRoute(
@@ -49,7 +52,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/worker',
-        builder: (context, state) => const WorkerHome(),
+        builder: (context, state) {
+          final user = ref.read(currentUserProvider);
+          final isElectrician =
+              user?.role == UserRole.worker && user?.trade == TradeType.electrical;
+          final isPlumber =
+              user?.role == UserRole.worker && user?.trade == TradeType.plumbing;
+          if (isElectrician) return const ElectricianShellScreen();
+          if (isPlumber) return const PlumberShellScreen();
+          return const WorkerHome();
+        },
         routes: [
           GoRoute(
             path: 'task/:taskId',
@@ -61,6 +73,48 @@ final routerProvider = Provider<GoRouter>((ref) {
                 extractedItemId: extra?['extractedItemId'] as String? ?? '',
               );
             },
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/electrician',
+        builder: (context, state) => const ElectricianShellScreen(),
+        routes: [
+          GoRoute(
+            path: 'task/:taskId',
+            builder: (context, state) {
+              final taskId = state.pathParameters['taskId']!;
+              final extra = state.extra as Map<String, dynamic>?;
+              return ElectricianTaskDetailScreen(
+                taskId: taskId,
+                extractedItemId: extra?['extractedItemId'] as String? ?? '',
+              );
+            },
+          ),
+          GoRoute(
+            path: 'ai-review',
+            builder: (context, state) => const AiReviewScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/plumber',
+        builder: (context, state) => const PlumberShellScreen(),
+        routes: [
+          GoRoute(
+            path: 'task/:taskId',
+            builder: (context, state) {
+              final taskId = state.pathParameters['taskId']!;
+              final extra = state.extra as Map<String, dynamic>?;
+              return PlumberTaskDetailScreen(
+                taskId: taskId,
+                extractedItemId: extra?['extractedItemId'] as String? ?? '',
+              );
+            },
+          ),
+          GoRoute(
+            path: 'ai-review',
+            builder: (context, state) => const AiReviewScreen(),
           ),
         ],
       ),
@@ -98,11 +152,21 @@ String _homeRouteForRole(UserRole? role) {
   }
 }
 
-/// A [ChangeNotifier] that triggers GoRouter to re-evaluate redirects
-/// when the auth state changes.
+String _homeRouteForUser(UserModel? user) {
+  if (user?.role == UserRole.worker && user?.trade == TradeType.electrical) {
+    return '/electrician';
+  }
+  if (user?.role == UserRole.worker && user?.trade == TradeType.plumbing) {
+    return '/plumber';
+  }
+  return _homeRouteForRole(user?.role);
+}
+
+/// Triggers GoRouter redirect when Supabase session or profile changes.
 class RouterRefreshNotifier extends ChangeNotifier {
-  RouterRefreshNotifier(ProviderRef ref) {
-    ref.listen(firebaseAuthProvider, (_, __) => notifyListeners());
+  RouterRefreshNotifier(Ref ref) {
+    ref.listen(supabaseSessionProvider, (_, __) => notifyListeners());
+    ref.listen(authNotifierProvider, (_, __) => notifyListeners());
     ref.listen(currentUserProvider, (_, __) => notifyListeners());
   }
 }

@@ -1,5 +1,4 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import * as admin from "firebase-admin";
 import { getGeminiApiKey, isDemoMode, GEMINI_MODEL, MAX_INLINE_AUDIO_BYTES } from "./config";
 import { validateGeminiResponse } from "./validators";
 import { GeminiExtractionResult } from "./types";
@@ -76,14 +75,14 @@ Be specific and accurate in summaries. Do not invent information not in the audi
 // ─── Real Gemini integration path ─────────────────────────────────────────────
 
 /**
- * REAL PATH: Downloads audio from Firebase Storage, sends to Gemini,
+ * REAL PATH: Downloads audio from provided URL, sends to Gemini,
  * returns validated structured extraction result.
  *
  * Tradeoff: inline base64 works for files up to ~20MB.
  * For larger files, use the Gemini Files API (not implemented in MVP).
  */
 export async function extractFromAudio(
-  storagePath: string,
+  audioUrl: string,
   mimeType: string
 ): Promise<GeminiExtractionResult> {
   if (isDemoMode()) {
@@ -93,17 +92,18 @@ export async function extractFromAudio(
 
   const apiKey = getGeminiApiKey();
 
-  // Download audio file from Firebase Storage
-  const bucket = admin.storage().bucket();
-  const file = bucket.file(storagePath);
-
-  const [exists] = await file.exists();
-  if (!exists) {
-    throw new Error(`Audio file not found at storage path: ${storagePath}`);
+  // Download audio bytes from Supabase public/signed URL
+  const response = await fetch(audioUrl);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download audio from URL (status ${response.status}).`
+    );
   }
 
-  const [metadata] = await file.getMetadata();
-  const fileSizeBytes = parseInt(String(metadata.size || "0"), 10);
+  const contentLengthHeader = response.headers.get("content-length");
+  const headerSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const fileSizeBytes = headerSize > 0 ? headerSize : buffer.byteLength;
 
   if (fileSizeBytes > MAX_INLINE_AUDIO_BYTES) {
     throw new Error(
@@ -113,8 +113,7 @@ export async function extractFromAudio(
     );
   }
 
-  console.log(`[Gemini] Downloading audio: ${storagePath} (${fileSizeBytes} bytes)`);
-  const [buffer] = await file.download();
+  console.log(`[Gemini] Downloaded audio (${fileSizeBytes} bytes)`);
   const base64Audio = buffer.toString("base64");
 
   // Call Gemini with structured output

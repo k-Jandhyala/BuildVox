@@ -1,64 +1,136 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../models/user_model.dart';
+import 'supabase_service.dart';
 
 class AuthService {
-  static final _auth = FirebaseAuth.instance;
-  static final _db = FirebaseFirestore.instance;
+  static SupabaseClient get _c => SupabaseService.client;
 
-  /// Stream of Firebase auth state changes.
-  static Stream<User?> get authStateChanges => _auth.authStateChanges();
+  /// Demo emails → `app_users.role` (used when auto-creating a missing row).
+  static String _roleForDemoEmail(String email) {
+    switch (email.toLowerCase()) {
+      case 'gc@demo.com':
+        return 'gc';
+      case 'manager@demo.com':
+        return 'manager';
+      case 'admin@demo.com':
+        return 'admin';
+      default:
+        return 'worker';
+    }
+  }
 
-  /// Currently signed-in Firebase user (may be null).
-  static User? get currentUser => _auth.currentUser;
+  static String? _tradeForDemoEmail(String email) {
+    switch (email.toLowerCase()) {
+      case 'electrician@demo.com':
+        return 'electrical';
+      case 'plumber@demo.com':
+        return 'plumbing';
+      default:
+        return null;
+    }
+  }
 
-  /// Sign in with email and password.
-  /// Returns the UserModel if successful, throws on error.
+  static String _displayNameFromEmail(String email) {
+    final local = email.split('@').first;
+    if (local.isEmpty) return email;
+    return local[0].toUpperCase() + local.substring(1);
+  }
+
+  /// Creates `app_users` for this auth user if missing (e.g. UUID changed after Supabase migration).
+  static Future<void> _ensureAppUserRow(String uid) async {
+    final user = _c.auth.currentUser;
+    if (user == null) return;
+    final email = user.email ?? '';
+    final role = _roleForDemoEmail(email);
+    final trade = _tradeForDemoEmail(email);
+
+    final row = <String, dynamic>{
+      'id': uid,
+      'email': email,
+      'name': _displayNameFromEmail(email),
+      'role': role,
+    };
+    if (trade != null) row['trade'] = trade;
+
+    await _c.from('app_users').upsert(row);
+  }
+
+  /// Supabase Auth session changes (sign-in / sign-out / refresh).
+  static Stream<Session?> get sessionStream =>
+      _c.auth.onAuthStateChange.map((event) => event.session);
+
+  /// Currently signed-in Supabase user (may be null).
+  static User? get currentUser => _c.auth.currentUser;
+
+  /// Sign in with email and password. Profile is loaded from `app_users` (id = auth user id).
   static Future<UserModel> signIn(String email, String password) async {
-    final cred = await _auth.signInWithEmailAndPassword(
+    await _c.auth.signInWithPassword(
       email: email.trim(),
       password: password,
     );
 
-    final uid = cred.user!.uid;
-    final userDoc = await _db.collection('users').doc(uid).get();
+    final uid = _c.auth.currentUser?.id;
+    if (uid == null) {
+      await _c.auth.signOut();
+      throw Exception('Sign-in failed: no session.');
+    }
 
-    if (!userDoc.exists) {
-      // Auth exists but no Firestore profile yet — sign out and throw
-      await _auth.signOut();
+    var row = await _c.from('app_users').select().eq('id', uid).maybeSingle();
+
+    if (row == null) {
+      try {
+        await _ensureAppUserRow(uid);
+        row = await _c.from('app_users').select().eq('id', uid).maybeSingle();
+      } catch (_) {
+        // RLS or constraint — fall through to error below
+      }
+    }
+
+    if (row == null) {
+      await _c.auth.signOut();
       throw Exception(
-        'User profile not found. Run "Seed Demo Data" from the Admin screen first.',
+        'User profile not found in Supabase. '
+        'Ensure app_users.id matches this user\'s UUID in Authentication. '
+        'If the row exists in the Table Editor but login still fails, check RLS: '
+        'signed-in clients use the `authenticated` role (not only `anon`).',
       );
     }
 
-    return UserModel.fromFirestore(userDoc);
+    return UserModel.fromJson(Map<String, dynamic>.from(row));
   }
 
-  /// Sign out.
   static Future<void> signOut() async {
-    await _auth.signOut();
+    await _c.auth.signOut();
   }
 
-  /// Fetch current user's Firestore profile.
   static Future<UserModel?> getCurrentUserProfile() async {
-    final uid = _auth.currentUser?.uid;
+    final uid = _c.auth.currentUser?.id;
     if (uid == null) return null;
 
-    final doc = await _db.collection('users').doc(uid).get();
-    if (!doc.exists) return null;
+    var row = await _c.from('app_users').select().eq('id', uid).maybeSingle();
+    if (row == null) {
+      try {
+        await _ensureAppUserRow(uid);
+        row = await _c.from('app_users').select().eq('id', uid).maybeSingle();
+      } catch (_) {}
+    }
+    if (row == null) return null;
 
-    return UserModel.fromFirestore(doc);
+    return UserModel.fromJson(Map<String, dynamic>.from(row));
   }
 
-  /// Stream of the current user's Firestore profile.
-  /// Updates in real time if the document changes.
+  /// Live profile for the signed-in user (Realtime on `app_users`).
   static Stream<UserModel?> currentUserProfileStream() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value(null);
-
-    return _db.collection('users').doc(uid).snapshots().map((snap) {
-      if (!snap.exists) return null;
-      return UserModel.fromFirestore(snap);
+    return _c.auth.onAuthStateChange.asyncExpand((event) {
+      final uid = event.session?.user.id;
+      if (uid == null) return Stream<UserModel?>.value(null);
+      return _c.from('app_users').stream(primaryKey: ['id']).eq('id', uid).map(
+        (rows) {
+          if (rows.isEmpty) return null;
+          return UserModel.fromJson(Map<String, dynamic>.from(rows.first));
+        },
+      );
     });
   }
 }

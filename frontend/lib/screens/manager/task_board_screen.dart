@@ -5,7 +5,7 @@ import '../../models/extracted_item_model.dart';
 import '../../models/task_assignment_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/extracted_items_provider.dart';
-import '../../services/firestore_service.dart';
+import '../../services/database_service.dart';
 import '../../theme.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_overlay.dart';
@@ -114,11 +114,11 @@ class _TaskBoardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<ExtractedItemModel?>(
-      future: FirestoreService.getExtractedItem(task.extractedItemId),
+      future: DatabaseService.getExtractedItem(task.extractedItemId),
       builder: (context, itemSnap) {
         final item = itemSnap.data;
         return FutureBuilder<UserModel?>(
-          future: FirestoreService.getUser(task.assignedToUserId),
+          future: DatabaseService.getUser(task.assignedToUserId),
           builder: (context, userSnap) {
             final worker = userSnap.data;
             return Card(

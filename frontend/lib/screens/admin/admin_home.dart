@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import '../../models/extracted_item_model.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/extracted_items_provider.dart';
-import '../../services/auth_service.dart';
 import '../../services/functions_service.dart';
 import '../../theme.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/extracted_item_card.dart';
 import '../../widgets/loading_overlay.dart';
-import '../../widgets/tier_badge.dart';
+import '../../widgets/account_menu_button.dart';
 
 class AdminHome extends ConsumerStatefulWidget {
   const AdminHome({super.key});
@@ -24,18 +20,10 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(currentUserProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('BuildVox  ·  Admin'),
-        actions: [
-          TextButton(
-            onPressed: () => AuthService.signOut(),
-            child: const Text('Sign Out',
-                style: TextStyle(color: Colors.white, fontSize: 13)),
-          ),
-        ],
+        actions: const [AccountMenuButton()],
       ),
       body: IndexedStack(
         index: _selectedIndex,
@@ -114,7 +102,7 @@ class _SeedTabState extends ConsumerState<_SeedTab> {
                 icon: Icons.people_outline_rounded,
                 title: 'Seed Demo Data',
                 description:
-                    'Creates 5 demo users, 2 companies, 1 project, and 2 job sites.\n\n'
+                    'Creates Firebase Auth users and Supabase rows (5 profiles, 2 companies, 1 project, 2 sites).\n\n'
                     'Demo accounts:\n'
                     '  • gc@demo.com\n'
                     '  • electrician@demo.com\n'
@@ -157,19 +145,6 @@ class _SeedTabState extends ConsumerState<_SeedTab> {
                 onAction: null,
               ),
 
-              const SizedBox(height: 24),
-
-              // ── Sign out ─────────────────────────────────────────────────
-              OutlinedButton.icon(
-                onPressed: AuthService.signOut,
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('Sign Out'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: BVColors.blocker,
-                  side: const BorderSide(color: BVColors.blocker),
-                  minimumSize: const Size(double.infinity, 48),
-                ),
-              ),
               const SizedBox(height: 40),
             ],
           ),

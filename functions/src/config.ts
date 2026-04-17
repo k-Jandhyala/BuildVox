@@ -40,7 +40,7 @@ export function getDemoPassword(): string {
 }
 
 /** Gemini model to use for audio extraction. */
-export const GEMINI_MODEL = "gemini-1.5-pro";
+export const GEMINI_MODEL = "gemini-2.5-flash";
 
 /** Max audio file size to send inline to Gemini (20 MB). */
 export const MAX_INLINE_AUDIO_BYTES = 20 * 1024 * 1024;

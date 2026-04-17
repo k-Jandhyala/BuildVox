@@ -1,5 +1,3 @@
-import * as admin from "firebase-admin";
-
 // ─── Enums / Union Types ─────────────────────────────────────────────────────
 
 export type UserRole = "worker" | "gc" | "manager" | "admin";
@@ -54,7 +52,7 @@ export interface UserDoc {
   assignedProjectIds: string[];
   assignedSiteIds: string[];
   fcmTokens: string[];
-  createdAt: admin.firestore.Timestamp;
+  createdAt?: string;
 }
 
 export interface CompanyDoc {
@@ -73,7 +71,7 @@ export interface ProjectDoc {
   jobSiteIds: string[];
   // Ordered trade sequence for schedule-change downstream routing
   tradeSequence: TradeType[];
-  createdAt: admin.firestore.Timestamp;
+  createdAt?: string;
 }
 
 export interface JobSiteDoc {
@@ -82,7 +80,7 @@ export interface JobSiteDoc {
   name: string;
   address: string;
   activeTrades: TradeType[];
-  createdAt: admin.firestore.Timestamp;
+  createdAt?: string;
 }
 
 export interface VoiceMemoDoc {
@@ -92,14 +90,14 @@ export interface VoiceMemoDoc {
   companyId?: string;
   projectId: string;
   siteId: string;
-  storagePath: string;       // Firebase Storage path
-  audioUrl?: string;         // download URL (optional, set after upload)
+  storagePath?: string;      // optional Supabase object path
+  audioUrl?: string;         // Supabase public/signed URL
   transcriptStatus: ProcessingStatus;
   processingStatus: ProcessingStatus;
   overallSummary?: string;
   rawTranscript?: string;
   detectedLanguage?: string;
-  createdAt: admin.firestore.Timestamp;
+  createdAt?: string;
   errorMessage?: string;
 }
 
@@ -124,7 +122,7 @@ export interface ExtractedItemDoc {
   recipientUserIds: string[];
   recipientCompanyIds: string[];
   status: TaskStatus;
-  createdAt: admin.firestore.Timestamp;
+  createdAt?: string;
 }
 
 export interface TaskAssignmentDoc {
@@ -136,9 +134,9 @@ export interface TaskAssignmentDoc {
   projectId: string;
   siteId: string;
   status: TaskStatus;
-  dueDate?: admin.firestore.Timestamp;
-  createdAt: admin.firestore.Timestamp;
-  updatedAt: admin.firestore.Timestamp;
+  dueDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface NotificationDoc {
@@ -150,7 +148,7 @@ export interface NotificationDoc {
   title: string;
   body: string;
   read: boolean;
-  createdAt: admin.firestore.Timestamp;
+  createdAt?: string;
 }
 
 export interface DailyDigestDoc {
@@ -159,7 +157,7 @@ export interface DailyDigestDoc {
   dateKey: string;           // e.g. "2024-01-15"
   summary: string;
   includedItemIds: string[];
-  createdAt: admin.firestore.Timestamp;
+  createdAt?: string;
 }
 
 // ─── Gemini Response Shape ────────────────────────────────────────────────────
@@ -190,7 +188,8 @@ export interface GeminiExtractionResult {
 // ─── Callable Function Payloads ───────────────────────────────────────────────
 
 export interface SubmitVoiceMemoRequest {
-  storagePath: string;      // e.g. "audio/uid/filename.m4a"
+  audioUrl: string;         // Supabase public/signed URL
+  storagePath?: string;     // optional object path for metadata/debugging
   projectId: string;
   siteId: string;
   mimeType?: string;        // defaults to "audio/mp4"
@@ -232,5 +231,40 @@ export interface GenerateDailyDigestResponse {
   success: boolean;
   digestId: string;
   summary: string;
+  itemCount: number;
+}
+
+export interface StartVoiceMemoProcessingRequest extends SubmitVoiceMemoRequest {
+  photoUrls?: string[];
+}
+
+export interface StartVoiceMemoProcessingResponse {
+  success: boolean;
+  requestId: string;
+  status: ProcessingStatus;
+  error?: string;
+}
+
+export interface PollVoiceMemoProcessingRequest {
+  requestId: string;
+}
+
+export interface PollVoiceMemoProcessingResponse {
+  success: boolean;
+  requestId: string;
+  status: ProcessingStatus;
+  items?: Record<string, unknown>[];
+  error?: string;
+}
+
+export interface SubmitReviewedItemsRequest {
+  requestId: string;
+  projectId: string;
+  siteId: string;
+  items: Record<string, unknown>[];
+}
+
+export interface SubmitReviewedItemsResponse {
+  success: boolean;
   itemCount: number;
 }

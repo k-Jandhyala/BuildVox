@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class CompanyModel {
   final String id;
   final String name;
@@ -15,16 +13,15 @@ class CompanyModel {
     required this.activeProjectIds,
   });
 
-  factory CompanyModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory CompanyModel.fromJson(Map<String, dynamic> json) {
     return CompanyModel(
-      id: doc.id,
-      name: data['name'] as String? ?? '',
-      tradeType: data['tradeType'] as String? ?? 'other',
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      tradeType: json['trade_type'] as String? ?? 'other',
       managerUserIds:
-          List<String>.from(data['managerUserIds'] as List? ?? []),
+          List<String>.from(json['manager_user_ids'] as List? ?? []),
       activeProjectIds:
-          List<String>.from(data['activeProjectIds'] as List? ?? []),
+          List<String>.from(json['active_project_ids'] as List? ?? []),
     );
   }
 }

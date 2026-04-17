@@ -145,18 +145,25 @@ function validateGeminiItem(raw: unknown, idx: number): GeminiExtractedItem {
 
 export function validateSubmitMemoPayload(
   data: unknown
-): { storagePath: string; projectId: string; siteId: string; mimeType: string } {
+): {
+  audioUrl: string;
+  storagePath?: string;
+  projectId: string;
+  siteId: string;
+  mimeType: string;
+} {
   if (typeof data !== "object" || data === null) {
     throw new Error("Invalid request payload");
   }
   const d = data as Record<string, unknown>;
 
-  if (!isString(d.storagePath)) throw new Error("storagePath is required");
+  if (!isString(d.audioUrl)) throw new Error("audioUrl is required");
   if (!isString(d.projectId)) throw new Error("projectId is required");
   if (!isString(d.siteId)) throw new Error("siteId is required");
 
   return {
-    storagePath: d.storagePath,
+    audioUrl: d.audioUrl,
+    storagePath: isString(d.storagePath) ? d.storagePath : undefined,
     projectId: d.projectId,
     siteId: d.siteId,
     mimeType: isString(d.mimeType) ? d.mimeType : "audio/mp4",
@@ -195,4 +202,43 @@ export function validateUpdateTaskStatusPayload(
   }
 
   return { taskId: d.taskId, status: d.status as TaskStatus };
+}
+
+export function validatePollVoiceMemoPayload(
+  data: unknown
+): { requestId: string } {
+  if (typeof data !== "object" || data === null) {
+    throw new Error("Invalid request payload");
+  }
+  const d = data as Record<string, unknown>;
+  if (!isString(d.requestId)) throw new Error("requestId is required");
+  return { requestId: d.requestId };
+}
+
+export function validateSubmitReviewedItemsPayload(
+  data: unknown
+): {
+  requestId: string;
+  projectId: string;
+  siteId: string;
+  items: Record<string, unknown>[];
+} {
+  if (typeof data !== "object" || data === null) {
+    throw new Error("Invalid request payload");
+  }
+  const d = data as Record<string, unknown>;
+  if (!isString(d.requestId)) throw new Error("requestId is required");
+  if (!isString(d.projectId)) throw new Error("projectId is required");
+  if (!isString(d.siteId)) throw new Error("siteId is required");
+  if (!Array.isArray(d.items)) throw new Error("items array is required");
+
+  return {
+    requestId: d.requestId,
+    projectId: d.projectId,
+    siteId: d.siteId,
+    items: d.items.map((x) => (typeof x === "object" && x !== null ? x : {})) as Record<
+      string,
+      unknown
+    >[],
+  };
 }

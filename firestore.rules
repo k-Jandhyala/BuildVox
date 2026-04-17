@@ -46,8 +46,14 @@ service cloud.firestore {
 
     // ─── users collection ─────────────────────────────────────────────────────
     match /users/{userId} {
-      // Users can read their own document; admin reads all
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // Users can read their own document.
+      // GC/Managers need read access for assignment flows and task board worker lookups.
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        isGC() ||
+        isManager()
+      );
       // Only the user themselves or admin can write
       allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       // GC and managers can list users in their projects (needed for assignment)

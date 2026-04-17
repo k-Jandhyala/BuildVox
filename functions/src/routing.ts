@@ -6,49 +6,66 @@ import {
   UserDoc,
   TradeType,
 } from "./types";
+import { getSupabase } from "./supabaseAdmin";
+import { rowToUserDoc } from "./db";
 
-const db = () => admin.firestore();
+function rowToProject(row: Record<string, unknown>): ProjectDoc {
+  return {
+    id: row.id as string,
+    name: (row.name as string) ?? "",
+    gcUserIds: (row.gc_user_ids as string[]) ?? [],
+    companyIds: (row.company_ids as string[]) ?? [],
+    jobSiteIds: (row.job_site_ids as string[]) ?? [],
+    tradeSequence: (row.trade_sequence as TradeType[]) ?? [],
+    createdAt: row.created_at as string | undefined,
+  };
+}
 
-// ─── Load helpers ─────────────────────────────────────────────────────────────
+function rowToCompany(row: Record<string, unknown>): CompanyDoc {
+  return {
+    id: row.id as string,
+    name: (row.name as string) ?? "",
+    tradeType: (row.trade_type as TradeType) ?? "other",
+    managerUserIds: (row.manager_user_ids as string[]) ?? [],
+    activeProjectIds: (row.active_project_ids as string[]) ?? [],
+  };
+}
 
 export async function loadProject(projectId: string): Promise<ProjectDoc | null> {
-  const snap = await db().collection("projects").doc(projectId).get();
-  if (!snap.exists) return null;
-  return { id: snap.id, ...snap.data() } as ProjectDoc;
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return rowToProject(data as Record<string, unknown>);
 }
 
 export async function loadCompaniesForProject(
   projectId: string
 ): Promise<CompanyDoc[]> {
-  const snap = await db()
-    .collection("companies")
-    .where("activeProjectIds", "array-contains", projectId)
-    .get();
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyDoc));
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("companies")
+    .select("*")
+    .filter("active_project_ids", "cs", `{${projectId}}`);
+  if (error || !data) return [];
+  return data.map((d) => rowToCompany(d as Record<string, unknown>));
 }
 
 export async function loadUsersForProject(
   projectId: string
 ): Promise<UserDoc[]> {
-  const snap = await db()
-    .collection("users")
-    .where("assignedProjectIds", "array-contains", projectId)
-    .get();
-  return snap.docs.map((d) => ({ uid: d.id, ...d.data() } as UserDoc));
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("*")
+    .filter("assigned_project_ids", "cs", `{${projectId}}`);
+  if (error || !data) return [];
+  return data.map((d) => rowToUserDoc(d as Record<string, unknown>));
 }
 
-// ─── Core routing logic ───────────────────────────────────────────────────────
-
-/**
- * Determines which users and companies should receive this extracted item
- * based on its notification tier and the project's trade relationships.
- *
- * Routing rules:
- *   issue_or_blocker   → GC users + relevant trade company
- *   material_request   → relevant trade company only
- *   progress_update    → no immediate notification (logged to digest)
- *   schedule_change    → GC users + all downstream trade companies
- */
 export async function determineRecipients(
   item: GeminiExtractedItem,
   projectId: string
@@ -62,48 +79,42 @@ export async function determineRecipients(
   const recipientCompanyIds: string[] = [];
 
   if (!project) {
-    console.warn(`[routing] Project ${projectId} not found; no recipients determined`);
+    console.warn(
+      `[routing] Project ${projectId} not found; no recipients determined`
+    );
     return { recipientUserIds, recipientCompanyIds };
   }
 
   const gcUserIds = project.gcUserIds || [];
 
-  // Helper: find company matching a given trade type
   const findCompanyByTrade = (trade: TradeType): CompanyDoc | undefined =>
     companies.find((c) => c.tradeType === trade);
 
   switch (item.tier) {
     case "issue_or_blocker": {
-      // GC must be notified
       recipientUserIds.push(...gcUserIds);
-      // The relevant trade company must also be notified
       const company = findCompanyByTrade(item.recommended_company_type);
       if (company) recipientCompanyIds.push(company.id);
       break;
     }
 
     case "material_request": {
-      // Only the trade company — GC is not involved in material requests
       const company = findCompanyByTrade(item.recommended_company_type);
       if (company) recipientCompanyIds.push(company.id);
       break;
     }
 
     case "progress_update": {
-      // No push notifications. Will be picked up by daily digest.
       break;
     }
 
     case "schedule_change": {
-      // GC must know
       recipientUserIds.push(...gcUserIds);
 
-      // Find the reporting trade's position in the sequence
       const seq = project.tradeSequence || [];
       const tradeIdx = seq.indexOf(item.trade);
 
       if (tradeIdx >= 0) {
-        // All trades that come AFTER the reporting trade in sequence are downstream
         const downstreamTrades = seq.slice(tradeIdx + 1);
         downstreamTrades.forEach((trade) => {
           const company = findCompanyByTrade(trade);
@@ -113,7 +124,6 @@ export async function determineRecipients(
         });
       }
 
-      // Also add any explicitly listed downstream trades from Gemini
       item.downstream_trades.forEach((trade) => {
         const company = findCompanyByTrade(trade);
         if (company && !recipientCompanyIds.includes(company.id)) {
@@ -124,19 +134,12 @@ export async function determineRecipients(
     }
   }
 
-  // Deduplicate
   return {
     recipientUserIds: [...new Set(recipientUserIds)],
     recipientCompanyIds: [...new Set(recipientCompanyIds)],
   };
 }
 
-// ─── FCM notification dispatch ────────────────────────────────────────────────
-
-/**
- * Sends FCM push notifications to the given recipient user IDs.
- * Also resolves company manager tokens when recipientCompanyIds are provided.
- */
 export async function sendFcmNotifications(
   recipientUserIds: string[],
   recipientCompanyIds: string[],
@@ -146,34 +149,40 @@ export async function sendFcmNotifications(
 ): Promise<void> {
   const messaging = admin.messaging();
   const allTokens: string[] = [];
+  const supabase = getSupabase();
 
-  // Collect FCM tokens for direct recipient users
   if (recipientUserIds.length > 0) {
-    const userSnaps = await db()
-      .collection("users")
-      .where(admin.firestore.FieldPath.documentId(), "in", recipientUserIds.slice(0, 10))
-      .get();
-    userSnaps.docs.forEach((doc) => {
-      const user = doc.data() as UserDoc;
-      if (user.fcmTokens) allTokens.push(...user.fcmTokens);
+    const slice = recipientUserIds.slice(0, 10);
+    const { data: users } = await supabase
+      .from("app_users")
+      .select("*")
+      .in("id", slice);
+    (users ?? []).forEach((row) => {
+      const u = rowToUserDoc(row as Record<string, unknown>);
+      if (u.fcmTokens) allTokens.push(...u.fcmTokens);
     });
   }
 
-  // Collect FCM tokens for company managers
   if (recipientCompanyIds.length > 0) {
     for (const companyId of recipientCompanyIds) {
-      const companySnap = await db().collection("companies").doc(companyId).get();
-      if (!companySnap.exists) continue;
-      const company = companySnap.data() as CompanyDoc;
-      if (!company.managerUserIds || company.managerUserIds.length === 0) continue;
+      const { data: companyRow } = await supabase
+        .from("companies")
+        .select("*")
+        .eq("id", companyId)
+        .maybeSingle();
+      if (!companyRow) continue;
+      const company = rowToCompany(companyRow as Record<string, unknown>);
+      if (!company.managerUserIds || company.managerUserIds.length === 0)
+        continue;
 
-      const managerSnaps = await db()
-        .collection("users")
-        .where(admin.firestore.FieldPath.documentId(), "in", company.managerUserIds.slice(0, 10))
-        .get();
-      managerSnaps.docs.forEach((doc) => {
-        const user = doc.data() as UserDoc;
-        if (user.fcmTokens) allTokens.push(...user.fcmTokens);
+      const slice = company.managerUserIds.slice(0, 10);
+      const { data: managers } = await supabase
+        .from("app_users")
+        .select("*")
+        .in("id", slice);
+      (managers ?? []).forEach((row) => {
+        const u = rowToUserDoc(row as Record<string, unknown>);
+        if (u.fcmTokens) allTokens.push(...u.fcmTokens);
       });
     }
   }
@@ -183,7 +192,6 @@ export async function sendFcmNotifications(
     return;
   }
 
-  // FCM allows max 500 tokens per sendEachForMulticast call
   const uniqueTokens = [...new Set(allTokens)];
   const chunks: string[][] = [];
   for (let i = 0; i < uniqueTokens.length; i += 500) {
@@ -213,8 +221,6 @@ export async function sendFcmNotifications(
   }
 }
 
-// ─── Notification doc creation ────────────────────────────────────────────────
-
 export async function createNotificationDocs(
   recipientUserIds: string[],
   recipientCompanyIds: string[],
@@ -223,48 +229,47 @@ export async function createNotificationDocs(
   type: string,
   extractedItemId: string
 ): Promise<void> {
-  const batch = db().batch();
-  const now = admin.firestore.FieldValue.serverTimestamp();
+  const supabase = getSupabase();
+  const rows: Record<string, unknown>[] = [];
 
-  // Direct user notifications
   for (const userId of recipientUserIds) {
-    const ref = db().collection("notifications").doc();
-    batch.set(ref, {
+    rows.push({
       type,
-      userId,
-      extractedItemId,
+      user_id: userId,
+      extracted_item_id: extractedItemId,
       title,
       body,
       read: false,
-      createdAt: now,
     });
   }
 
-  // Manager notifications for companies
   if (recipientCompanyIds.length > 0) {
     for (const companyId of recipientCompanyIds) {
-      const companySnap = await db().collection("companies").doc(companyId).get();
-      if (!companySnap.exists) continue;
-      const company = companySnap.data() as CompanyDoc;
-      for (const managerId of (company.managerUserIds || [])) {
-        const ref = db().collection("notifications").doc();
-        batch.set(ref, {
+      const { data: companyRow } = await supabase
+        .from("companies")
+        .select("*")
+        .eq("id", companyId)
+        .maybeSingle();
+      if (!companyRow) continue;
+      const company = rowToCompany(companyRow as Record<string, unknown>);
+      for (const managerId of company.managerUserIds || []) {
+        rows.push({
           type,
-          userId: managerId,
-          extractedItemId,
+          user_id: managerId,
+          extracted_item_id: extractedItemId,
           title,
           body,
           read: false,
-          createdAt: now,
         });
       }
     }
   }
 
-  await batch.commit();
-}
+  if (rows.length === 0) return;
 
-// ─── Notification title/body builders ─────────────────────────────────────────
+  const { error } = await supabase.from("notifications").insert(rows);
+  if (error) console.error("[notifications] insert failed:", error);
+}
 
 export function buildNotificationContent(
   tier: string,

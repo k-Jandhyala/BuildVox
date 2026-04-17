@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme.dart';
@@ -44,59 +45,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     try {
-      await ref
+      final user = await ref
           .read(authNotifierProvider.notifier)
           .signIn(_emailCtrl.text.trim(), _passwordCtrl.text);
 
       if (!mounted) return;
 
-      // Router redirect handles navigation — but we trigger it by reading profile
-      final user = ref.read(currentUserProvider);
-      _navigateForRole(user?.role);
+      setState(() => _loading = false);
+      _navigateForRole(user.role);
     } catch (e) {
       setState(() {
-        _errorMessage = _friendlyError(e.toString());
+        _errorMessage = _friendlyError(e);
         _loading = false;
       });
     }
   }
 
-  void _navigateForRole(UserRole? role) {
-    switch (role) {
-      case UserRole.worker:
-        context.go('/worker');
-        break;
-      case UserRole.gc:
-        context.go('/gc');
-        break;
-      case UserRole.manager:
-        context.go('/manager');
-        break;
-      case UserRole.admin:
-        context.go('/admin');
-        break;
-      default:
-        setState(() {
-          _loading = false;
-          _errorMessage = 'User profile not found. Please seed demo data first.';
-        });
-    }
+  void _navigateForRole(UserRole role) {
+    final path = switch (role) {
+      UserRole.worker => '/worker',
+      UserRole.gc => '/gc',
+      UserRole.manager => '/manager',
+      UserRole.admin => '/admin',
+    };
+    context.go(path);
   }
 
-  String _friendlyError(String raw) {
-    if (raw.contains('wrong-password') || raw.contains('INVALID_LOGIN_CREDENTIALS')) {
+  String _friendlyError(Object e) {
+    if (e is AuthException) {
+      final m = e.message.toLowerCase();
+      if (m.contains('invalid') &&
+          (m.contains('credential') || m.contains('login'))) {
+        return 'Incorrect email or password.';
+      }
+      if (m.contains('email') && m.contains('confirm')) {
+        return 'Confirm your email in Supabase (Authentication) before signing in.';
+      }
+      return e.message;
+    }
+
+    final raw = e.toString().toLowerCase();
+    if (raw.contains('wrong-password') ||
+        raw.contains('invalid_login_credentials') ||
+        raw.contains('invalid login credentials')) {
       return 'Incorrect email or password.';
     }
     if (raw.contains('user-not-found')) {
       return 'No account found with that email.';
     }
     if (raw.contains('profile not found')) {
-      return 'User profile missing. Run Seed Demo Data from the Admin screen.';
+      return 'Profile row missing or blocked by RLS. Ensure app_users.id matches your auth user UUID '
+          'and run the migration that adds `authenticated` RLS policies.';
     }
-    if (raw.contains('network')) {
+    if (raw.contains('network') || raw.contains('socketexception')) {
       return 'Network error. Check your internet connection.';
     }
-    return 'Sign-in failed. Check your credentials and try again.';
+    return e.toString();
   }
 
   @override

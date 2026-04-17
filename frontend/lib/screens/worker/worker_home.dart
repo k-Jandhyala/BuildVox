@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../providers/auth_provider.dart';
-import '../../theme.dart';
+import '../../widgets/account_menu_button.dart';
 import 'my_tasks_screen.dart';
 import 'submit_memo_screen.dart';
 
@@ -22,28 +21,10 @@ class _WorkerHomeState extends ConsumerState<WorkerHome> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(currentUserProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('BuildVox'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: BVColors.accent,
-              child: Text(
-                user?.initials ?? '?',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
+        actions: const [AccountMenuButton()],
       ),
       body: IndexedStack(
         index: _selectedIndex,

@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class NotificationModel {
   final String id;
   final String type;
@@ -23,18 +21,23 @@ class NotificationModel {
     this.createdAt,
   });
 
-  factory NotificationModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory NotificationModel.fromJson(Map<String, dynamic> json) {
     return NotificationModel(
-      id: doc.id,
-      type: data['type'] as String? ?? '',
-      userId: data['userId'] as String? ?? '',
-      extractedItemId: data['extractedItemId'] as String?,
-      taskAssignmentId: data['taskAssignmentId'] as String?,
-      title: data['title'] as String? ?? '',
-      body: data['body'] as String? ?? '',
-      read: data['read'] as bool? ?? false,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      id: json['id'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      userId: json['user_id'] as String? ?? '',
+      extractedItemId: json['extracted_item_id'] as String?,
+      taskAssignmentId: json['task_assignment_id'] as String?,
+      title: json['title'] as String? ?? '',
+      body: json['body'] as String? ?? '',
+      read: json['read'] as bool? ?? false,
+      createdAt: _parse(json['created_at']),
     );
+  }
+
+  static DateTime? _parse(dynamic v) {
+    if (v == null) return null;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
   }
 }

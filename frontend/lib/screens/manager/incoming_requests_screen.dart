@@ -4,7 +4,7 @@ import '../../models/extracted_item_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/extracted_items_provider.dart';
-import '../../services/firestore_service.dart';
+import '../../services/database_service.dart';
 import '../../services/functions_service.dart';
 import '../../theme.dart';
 import '../../widgets/empty_state.dart';
@@ -111,7 +111,7 @@ class _AssignButtonState extends ConsumerState<_AssignButton> {
     List<UserModel> workers = [];
     try {
       workers =
-          await FirestoreService.getWorkersForCompany(user!.companyId!);
+          await DatabaseService.getWorkersForCompany(user!.companyId!);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

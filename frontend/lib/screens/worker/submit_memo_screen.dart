@@ -142,8 +142,8 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
     });
 
     try {
-      // 1. Upload to Firebase Storage
-      final storagePath = await StorageService.uploadAudio(
+      // 1. Upload to Supabase Storage
+      final uploadResult = await StorageService.uploadAudio(
         _selectedFile!,
         onProgress: (p) => setState(() => _uploadProgress = p),
       );
@@ -154,12 +154,12 @@ class _SubmitMemoScreenState extends ConsumerState<SubmitMemoScreen> {
       });
 
       // 2. Call backend Cloud Function
-      final mimeType = StorageService.getMimeType(storagePath);
       final result = await FunctionsService.submitVoiceMemo(
-        storagePath: storagePath,
+        audioUrl: uploadResult.publicUrl,
+        storagePath: uploadResult.objectPath,
         projectId: projectId,
         siteId: siteId,
-        mimeType: mimeType,
+        mimeType: uploadResult.mimeType,
       );
 
       if (!mounted) return;

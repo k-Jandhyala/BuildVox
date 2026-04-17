@@ -1,47 +1,43 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 
-// ── Raw Firebase auth state ───────────────────────────────────────────────────
-
-/// Emits the raw Firebase [User] (or null) whenever auth state changes.
-final firebaseAuthProvider = StreamProvider<User?>((ref) {
-  return AuthService.authStateChanges;
+/// Current Supabase session (null when signed out).
+final supabaseSessionProvider = StreamProvider<Session?>((ref) {
+  return AuthService.sessionStream;
 });
 
-// ── Firestore user profile ────────────────────────────────────────────────────
-
-/// Watches the current user's Firestore document in real time.
-/// Returns null when not signed in.
+/// Watches `app_users` for the signed-in Supabase user (id = auth.users.id).
 final userProfileProvider = StreamProvider<UserModel?>((ref) {
-  final authState = ref.watch(firebaseAuthProvider);
-  return authState.when(
-    data: (user) {
-      if (user == null) return Stream.value(null);
-      return AuthService.currentUserProfileStream();
-    },
-    loading: () => Stream.value(null),
-    error: (_, __) => Stream.value(null),
-  );
+  return AuthService.currentUserProfileStream();
 });
-
-// ── Auth state notifier ───────────────────────────────────────────────────────
 
 /// Manages sign-in and sign-out with loading/error state.
 class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
-  AuthNotifier() : super(const AsyncValue.loading());
+  /// `data(null)` means "no explicit profile from this notifier" — session + profile
+  /// still come from [userProfileProvider] (see [currentUserProvider]).
+  AuthNotifier() : super(const AsyncValue.data(null));
 
-  Future<void> signIn(String email, String password) async {
+  /// Returns the signed-in profile. Rethrows on failure so callers can show errors.
+  Future<UserModel> signIn(String email, String password) async {
     state = const AsyncValue.loading();
     try {
       final user = await AuthService.signIn(email, password);
-      // Register FCM token after sign-in
-      await NotificationService.refreshTokenForCurrentUser();
+      try {
+        await NotificationService.refreshTokenForCurrentUser();
+      } catch (e, st) {
+        debugPrint('[FCM] refreshTokenForCurrentUser failed (sign-in still OK): $e');
+        debugPrint('$st');
+      }
       state = AsyncValue.data(user);
+      return user;
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
+      rethrow;
     }
   }
 
@@ -56,10 +52,27 @@ final authNotifierProvider =
   return AuthNotifier();
 });
 
-// ── Convenience selector ──────────────────────────────────────────────────────
-
-/// Current UserModel from the live Firestore stream.
-/// Use this throughout the app to get role, companyId, etc.
+/// Current profile (role, company, projects, …).
+///
+/// Merges [authNotifierProvider] (set immediately on sign-in) with
+/// [userProfileProvider] (Realtime stream — can lag behind sign-in).
+/// Without this merge, [currentUserProvider] is often null right after login
+/// even when the profile exists, which misroutes to "profile not found".
 final currentUserProvider = Provider<UserModel?>((ref) {
-  return ref.watch(userProfileProvider).valueOrNull;
+  final session = ref.watch(supabaseSessionProvider).valueOrNull;
+  final authAsync = ref.watch(authNotifierProvider);
+  final profile = ref.watch(userProfileProvider).valueOrNull;
+
+  final explicitUser = authAsync.maybeWhen(
+    data: (u) => u,
+    orElse: () => null,
+  );
+  if (explicitUser != null) return explicitUser;
+
+  if (session == null) return null;
+
+  return authAsync.maybeWhen(
+    data: (u) => u ?? profile,
+    orElse: () => profile,
+  );
 });

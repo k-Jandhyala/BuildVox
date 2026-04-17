@@ -1,19 +1,9 @@
-import * as admin from "firebase-admin";
 import { getDemoPassword } from "./config";
-
-const db = () => admin.firestore();
-const auth = () => admin.auth();
+import { getSupabase } from "./supabaseAdmin";
 
 /**
- * Seeds the Firebase project with demo data:
- *  - 5 Auth users (gc, electrician, plumber, manager, admin)
- *  - 2 companies (Volt Electric, AquaFlow Plumbing)
- *  - 1 project (Downtown Mixed-Use Tower)
- *  - 2 job sites
- *  - User docs linked to companies and projects
- *
- * This is idempotent — running it twice will not duplicate data.
- * Call via the Admin screen in the app OR the seedDemoData Cloud Function.
+ * Seeds Supabase Auth users + app tables (idempotent).
+ * No Firebase Auth — identities live in Supabase Auth only.
  */
 export async function seedDemoData(): Promise<{
   message: string;
@@ -21,177 +11,192 @@ export async function seedDemoData(): Promise<{
 }> {
   const created: string[] = [];
   const password = getDemoPassword();
-  const batch = db().batch();
-
-  // ─── 1. Create Auth users ─────────────────────────────────────────────────
+  const supabase = getSupabase();
 
   const demoUsers = [
     { email: "gc@demo.com", displayName: "Alex Rivera (GC)", role: "gc" },
-    { email: "electrician@demo.com", displayName: "Jordan Lee (Electrician)", role: "worker" },
-    { email: "plumber@demo.com", displayName: "Sam Kowalski (Plumber)", role: "worker" },
-    { email: "manager@demo.com", displayName: "Morgan Blake (Manager)", role: "manager" },
+    {
+      email: "electrician@demo.com",
+      displayName: "Jordan Lee (Electrician)",
+      role: "worker",
+    },
+    {
+      email: "plumber@demo.com",
+      displayName: "Sam Kowalski (Plumber)",
+      role: "worker",
+    },
+    {
+      email: "manager@demo.com",
+      displayName: "Morgan Blake (Manager)",
+      role: "manager",
+    },
     { email: "admin@demo.com", displayName: "Chris Admin", role: "admin" },
   ];
 
   const userIds: Record<string, string> = {};
 
-  for (const u of demoUsers) {
-    try {
-      const existing = await auth().getUserByEmail(u.email);
-      userIds[u.email] = existing.uid;
-      console.log(`[seed] Auth user already exists: ${u.email}`);
-    } catch {
-      const created_user = await auth().createUser({
-        email: u.email,
-        password,
-        displayName: u.displayName,
-        emailVerified: true,
-      });
-      userIds[u.email] = created_user.uid;
-      created.push(`auth:${u.email}`);
-      console.log(`[seed] Created auth user: ${u.email}`);
-    }
+  async function findUserIdByEmail(email: string): Promise<string | null> {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (error) return null;
+    const found = data.users.find((u) => u.email === email);
+    return found?.id ?? null;
   }
 
-  // ─── 2. Create companies ──────────────────────────────────────────────────
+  for (const u of demoUsers) {
+    let uid = await findUserIdByEmail(u.email);
+    if (uid) {
+      userIds[u.email] = uid;
+      console.log(`[seed] Auth user already exists: ${u.email}`);
+      continue;
+    }
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: u.email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: u.displayName },
+    });
+    if (error) {
+      uid = await findUserIdByEmail(u.email);
+      if (uid) {
+        userIds[u.email] = uid;
+        console.log(`[seed] User exists after error, using: ${u.email}`);
+        continue;
+      }
+      throw error;
+    }
+    if (!data.user) throw new Error(`createUser returned no user for ${u.email}`);
+    userIds[u.email] = data.user.id;
+    created.push(`auth:${u.email}`);
+    console.log(`[seed] Created Supabase Auth user: ${u.email}`);
+  }
 
   const voltId = "company_volt_electric";
   const aquaId = "company_aquaflow_plumbing";
+  const projectId = "project_downtown_tower";
 
-  const voltRef = db().collection("companies").doc(voltId);
-  const aquaRef = db().collection("companies").doc(aquaId);
+  const companyRows = [
+    {
+      id: voltId,
+      name: "Volt Electric Inc.",
+      trade_type: "electrical",
+      manager_user_ids: [userIds["manager@demo.com"]],
+      active_project_ids: [projectId],
+    },
+    {
+      id: aquaId,
+      name: "AquaFlow Plumbing LLC",
+      trade_type: "plumbing",
+      manager_user_ids: [] as string[],
+      active_project_ids: [projectId],
+    },
+  ];
 
-  batch.set(voltRef, {
-    name: "Volt Electric Inc.",
-    tradeType: "electrical",
-    managerUserIds: [userIds["manager@demo.com"]],
-    activeProjectIds: ["project_downtown_tower"],
-  }, { merge: true });
-
-  batch.set(aquaRef, {
-    name: "AquaFlow Plumbing LLC",
-    tradeType: "plumbing",
-    managerUserIds: [],
-    activeProjectIds: ["project_downtown_tower"],
-  }, { merge: true });
-
+  const { error: cErr } = await supabase.from("companies").upsert(companyRows);
+  if (cErr) throw cErr;
   created.push("company:volt_electric", "company:aquaflow_plumbing");
 
-  // ─── 3. Create project ────────────────────────────────────────────────────
-
-  const projectId = "project_downtown_tower";
-  const projectRef = db().collection("projects").doc(projectId);
-
-  batch.set(projectRef, {
+  const projectRow = {
+    id: projectId,
     name: "Downtown Mixed-Use Tower",
-    gcUserIds: [userIds["gc@demo.com"]],
-    companyIds: [voltId, aquaId],
-    jobSiteIds: ["site_floor_1_5", "site_floor_6_10"],
-    tradeSequence: ["framing", "electrical", "plumbing", "drywall", "paint"],
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
+    gc_user_ids: [userIds["gc@demo.com"]],
+    company_ids: [voltId, aquaId],
+    job_site_ids: ["site_floor_1_5", "site_floor_6_10"],
+    trade_sequence: ["framing", "electrical", "plumbing", "drywall", "paint"],
+  };
 
+  const { error: pErr } = await supabase.from("projects").upsert(projectRow);
+  if (pErr) throw pErr;
   created.push("project:downtown_tower");
 
-  // ─── 4. Create job sites ──────────────────────────────────────────────────
+  const siteRows = [
+    {
+      id: "site_floor_1_5",
+      project_id: projectId,
+      name: "Floors 1–5",
+      address: "123 Main St, Downtown — Floors 1–5",
+      active_trades: ["electrical", "plumbing"],
+    },
+    {
+      id: "site_floor_6_10",
+      project_id: projectId,
+      name: "Floors 6–10",
+      address: "123 Main St, Downtown — Floors 6–10",
+      active_trades: ["framing"],
+    },
+  ];
 
-  const site1Ref = db().collection("job_sites").doc("site_floor_1_5");
-  batch.set(site1Ref, {
-    projectId,
-    name: "Floors 1–5",
-    address: "123 Main St, Downtown — Floors 1–5",
-    activeTrades: ["electrical", "plumbing"],
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-
-  const site2Ref = db().collection("job_sites").doc("site_floor_6_10");
-  batch.set(site2Ref, {
-    projectId,
-    name: "Floors 6–10",
-    address: "123 Main St, Downtown — Floors 6–10",
-    activeTrades: ["framing"],
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-
+  const { error: sErr } = await supabase.from("job_sites").upsert(siteRows);
+  if (sErr) throw sErr;
   created.push("site:floors_1_5", "site:floors_6_10");
 
-  // ─── 5. Create user docs ──────────────────────────────────────────────────
+  const userRows = [
+    {
+      id: userIds["gc@demo.com"],
+      name: "Alex Rivera",
+      email: "gc@demo.com",
+      role: "gc",
+      company_id: null,
+      assigned_project_ids: [projectId],
+      assigned_site_ids: ["site_floor_1_5", "site_floor_6_10"],
+      fcm_tokens: [] as string[],
+    },
+    {
+      id: userIds["electrician@demo.com"],
+      name: "Jordan Lee",
+      email: "electrician@demo.com",
+      role: "worker",
+      trade: "electrical",
+      company_id: voltId,
+      assigned_project_ids: [projectId],
+      assigned_site_ids: ["site_floor_1_5"],
+      fcm_tokens: [] as string[],
+    },
+    {
+      id: userIds["plumber@demo.com"],
+      name: "Sam Kowalski",
+      email: "plumber@demo.com",
+      role: "worker",
+      trade: "plumbing",
+      company_id: aquaId,
+      assigned_project_ids: [projectId],
+      assigned_site_ids: ["site_floor_1_5"],
+      fcm_tokens: [] as string[],
+    },
+    {
+      id: userIds["manager@demo.com"],
+      name: "Morgan Blake",
+      email: "manager@demo.com",
+      role: "manager",
+      trade: "electrical",
+      company_id: voltId,
+      assigned_project_ids: [projectId],
+      assigned_site_ids: ["site_floor_1_5", "site_floor_6_10"],
+      fcm_tokens: [] as string[],
+    },
+    {
+      id: userIds["admin@demo.com"],
+      name: "Chris Admin",
+      email: "admin@demo.com",
+      role: "admin",
+      company_id: null,
+      assigned_project_ids: [projectId],
+      assigned_site_ids: ["site_floor_1_5", "site_floor_6_10"],
+      fcm_tokens: [] as string[],
+    },
+  ];
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
-
-  // GC
-  batch.set(db().collection("users").doc(userIds["gc@demo.com"]), {
-    uid: userIds["gc@demo.com"],
-    name: "Alex Rivera",
-    email: "gc@demo.com",
-    role: "gc",
-    companyId: null,
-    assignedProjectIds: [projectId],
-    assignedSiteIds: ["site_floor_1_5", "site_floor_6_10"],
-    fcmTokens: [],
-    createdAt: now,
-  }, { merge: true });
-
-  // Electrician
-  batch.set(db().collection("users").doc(userIds["electrician@demo.com"]), {
-    uid: userIds["electrician@demo.com"],
-    name: "Jordan Lee",
-    email: "electrician@demo.com",
-    role: "worker",
-    trade: "electrical",
-    companyId: voltId,
-    assignedProjectIds: [projectId],
-    assignedSiteIds: ["site_floor_1_5"],
-    fcmTokens: [],
-    createdAt: now,
-  }, { merge: true });
-
-  // Plumber
-  batch.set(db().collection("users").doc(userIds["plumber@demo.com"]), {
-    uid: userIds["plumber@demo.com"],
-    name: "Sam Kowalski",
-    email: "plumber@demo.com",
-    role: "worker",
-    trade: "plumbing",
-    companyId: aquaId,
-    assignedProjectIds: [projectId],
-    assignedSiteIds: ["site_floor_1_5"],
-    fcmTokens: [],
-    createdAt: now,
-  }, { merge: true });
-
-  // Manager
-  batch.set(db().collection("users").doc(userIds["manager@demo.com"]), {
-    uid: userIds["manager@demo.com"],
-    name: "Morgan Blake",
-    email: "manager@demo.com",
-    role: "manager",
-    trade: "electrical",
-    companyId: voltId,
-    assignedProjectIds: [projectId],
-    assignedSiteIds: ["site_floor_1_5", "site_floor_6_10"],
-    fcmTokens: [],
-    createdAt: now,
-  }, { merge: true });
-
-  // Admin
-  batch.set(db().collection("users").doc(userIds["admin@demo.com"]), {
-    uid: userIds["admin@demo.com"],
-    name: "Chris Admin",
-    email: "admin@demo.com",
-    role: "admin",
-    companyId: null,
-    assignedProjectIds: [projectId],
-    assignedSiteIds: ["site_floor_1_5", "site_floor_6_10"],
-    fcmTokens: [],
-    createdAt: now,
-  }, { merge: true });
-
+  const { error: uErr } = await supabase.from("app_users").upsert(userRows);
+  if (uErr) throw uErr;
   created.push(
-    "user:gc", "user:electrician", "user:plumber", "user:manager", "user:admin"
+    "user:gc",
+    "user:electrician",
+    "user:plumber",
+    "user:manager",
+    "user:admin"
   );
-
-  await batch.commit();
 
   return {
     message: `Seed complete. ${created.length} resources created/updated.`,

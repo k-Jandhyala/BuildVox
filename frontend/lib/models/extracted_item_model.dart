@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 
@@ -194,35 +193,40 @@ class ExtractedItemModel {
     this.createdAt,
   });
 
-  factory ExtractedItemModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory ExtractedItemModel.fromJson(Map<String, dynamic> json) {
     return ExtractedItemModel(
-      id: doc.id,
-      memoId: data['memoId'] as String? ?? '',
-      projectId: data['projectId'] as String? ?? '',
-      siteId: data['siteId'] as String? ?? '',
-      createdBy: data['createdBy'] as String? ?? '',
-      sourceText: data['sourceText'] as String? ?? '',
-      normalizedSummary: data['normalizedSummary'] as String? ?? '',
-      trade: data['trade'] as String? ?? 'other',
-      tier: TierType.fromString(data['tier'] as String?),
-      urgency: UrgencyLevel.fromString(data['urgency'] as String?),
-      unitOrArea: data['unitOrArea'] as String?,
-      needsGcAttention: data['needsGcAttention'] as bool? ?? false,
+      id: json['id'] as String? ?? '',
+      memoId: json['memo_id'] as String? ?? '',
+      projectId: json['project_id'] as String? ?? '',
+      siteId: json['site_id'] as String? ?? '',
+      createdBy: json['created_by'] as String? ?? '',
+      sourceText: json['source_text'] as String? ?? '',
+      normalizedSummary: json['normalized_summary'] as String? ?? '',
+      trade: json['trade'] as String? ?? 'other',
+      tier: TierType.fromString(json['tier'] as String?),
+      urgency: UrgencyLevel.fromString(json['urgency'] as String?),
+      unitOrArea: json['unit_or_area'] as String?,
+      needsGcAttention: json['needs_gc_attention'] as bool? ?? false,
       needsTradeManagerAttention:
-          data['needsTradeManagerAttention'] as bool? ?? false,
+          json['needs_trade_manager_attention'] as bool? ?? false,
       downstreamTrades:
-          List<String>.from(data['downstreamTrades'] as List? ?? []),
+          List<String>.from(json['downstream_trades'] as List? ?? []),
       recommendedCompanyType:
-          data['recommendedCompanyType'] as String? ?? 'other',
-      actionRequired: data['actionRequired'] as bool? ?? false,
-      suggestedNextStep: data['suggestedNextStep'] as String? ?? '',
+          json['recommended_company_type'] as String? ?? 'other',
+      actionRequired: json['action_required'] as bool? ?? false,
+      suggestedNextStep: json['suggested_next_step'] as String? ?? '',
       recipientUserIds:
-          List<String>.from(data['recipientUserIds'] as List? ?? []),
+          List<String>.from(json['recipient_user_ids'] as List? ?? []),
       recipientCompanyIds:
-          List<String>.from(data['recipientCompanyIds'] as List? ?? []),
-      status: ItemStatus.fromString(data['status'] as String?),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+          List<String>.from(json['recipient_company_ids'] as List? ?? []),
+      status: ItemStatus.fromString(json['status'] as String?),
+      createdAt: _parseDate(json['created_at']),
     );
+  }
+
+  static DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
   }
 }
