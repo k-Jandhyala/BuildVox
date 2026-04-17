@@ -4,6 +4,7 @@ import '../../widgets/account_menu_button.dart';
 import '../../theme.dart';
 import 'incoming_requests_screen.dart';
 import 'task_board_screen.dart';
+import 'manager_overview_screen.dart';
 import '../worker/submit_memo_screen.dart';
 
 class ManagerHome extends ConsumerStatefulWidget {
@@ -20,6 +21,7 @@ class _ManagerHomeState extends ConsumerState<ManagerHome> {
     IncomingRequestsScreen(),
     TaskBoardScreen(),
     SubmitMemoScreen(),
+    ManagerOverviewScreen(),
   ];
 
   @override
@@ -59,59 +61,70 @@ class _ManagerBottomBar extends StatelessWidget {
           border: Border(top: BorderSide(color: BVColors.divider)),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             // Left side
-            _item(
-              icon: Icons.inbox_outlined,
-              label: 'Requests',
-              color: color(0),
-              onTap: () => onSelect(0),
-              selected: selectedIndex == 0,
+            Expanded(
+              child: _item(
+                icon: Icons.inbox_outlined,
+                label: 'Requests',
+                color: color(0),
+                onTap: () => onSelect(0),
+                selected: selectedIndex == 0,
+              ),
             ),
-            _item(
-              icon: Icons.view_kanban_outlined,
-              label: 'Task Board',
-              color: color(1),
-              onTap: () => onSelect(1),
-              selected: selectedIndex == 1,
-            ),
-
-            // Center mic button (always middle)
-            GestureDetector(
-              onTap: () => onSelect(2),
-              child: Container(
-                width: 62,
-                height: 62,
-                decoration: const BoxDecoration(
-                  color: BVColors.primary,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 14,
-                      offset: Offset(0, 8),
-                    )
-                  ],
-                ),
-                child: const Icon(Icons.mic_rounded, size: 28, color: Colors.white),
+            Expanded(
+              child: _item(
+                icon: Icons.view_kanban_outlined,
+                label: 'Task Board',
+                color: color(1),
+                onTap: () => onSelect(1),
+                selected: selectedIndex == 1,
               ),
             ),
 
-            // Right side placeholders (keeps mic centered between 2 and 2)
-            _item(
-              icon: Icons.analytics_outlined,
-              label: 'Overview',
-              color: BVColors.textSecondary,
-              onTap: () {},
-              selected: false,
+            // Center mic button (always middle)
+            Expanded(
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => onSelect(2),
+                  child: Container(
+                    width: 62,
+                    height: 62,
+                    decoration: const BoxDecoration(
+                      color: BVColors.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black54,
+                          blurRadius: 14,
+                          offset: Offset(0, 8),
+                        )
+                      ],
+                    ),
+                    child: const Icon(Icons.mic_rounded, size: 28, color: Colors.white),
+                  ),
+                ),
+              ),
             ),
-            _item(
-              icon: Icons.person_outline_rounded,
-              label: 'Profile',
-              color: BVColors.textSecondary,
-              onTap: () {},
-              selected: false,
+
+            // Right side
+            Expanded(
+              child: _item(
+                icon: Icons.analytics_outlined,
+                label: 'Overview',
+                color: color(3),
+                onTap: () => onSelect(3),
+                selected: selectedIndex == 3,
+              ),
+            ),
+            Expanded(
+              child: _item(
+                icon: Icons.person_outline_rounded,
+                label: 'Profile',
+                color: BVColors.textSecondary,
+                onTap: () {},
+                selected: false,
+              ),
             ),
           ],
         ),
@@ -126,9 +139,7 @@ class _ManagerBottomBar extends StatelessWidget {
     required VoidCallback onTap,
     required bool selected,
   }) {
-    return SizedBox(
-      width: 92,
-      child: InkWell(
+    return InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -149,7 +160,6 @@ class _ManagerBottomBar extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }

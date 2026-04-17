@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//usr/local/**)",
+      "Bash(export PATH=\"$PATH:/mnt/c/Program Files/nodejs\")"
+    ]
+  }
+}

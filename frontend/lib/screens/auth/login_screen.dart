@@ -110,7 +110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor: BVColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -262,14 +262,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: CircularProgressIndicator(
                                   color: Colors.white, strokeWidth: 2.5),
                             )
-                          : const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text('Sign In'),
-                                SizedBox(width: 8),
-                                Icon(Icons.arrow_forward_rounded, size: 20),
-                              ],
-                            ),
+                          : const Text('Sign In'),
                     ),
                   ],
                 ),
@@ -337,6 +330,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 _emailCtrl.text = account.$2;
                                 _passwordCtrl.text = 'BuildVox2024!';
                               });
+                              _signIn();
                             },
                     );
                   }).toList(),
