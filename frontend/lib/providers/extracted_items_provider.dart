@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/extracted_item_model.dart';
 import '../models/task_assignment_model.dart';
+import '../models/user_model.dart';
 import '../services/database_service.dart';
 import 'auth_provider.dart';
 
@@ -60,4 +61,11 @@ final companyTasksProvider =
   final user = ref.watch(currentUserProvider);
   if (user?.companyId == null) return Stream.value([]);
   return DatabaseService.companyTasksStream(user!.companyId!);
+});
+
+final gcAssignedTasksProvider =
+    StreamProvider<List<TaskAssignmentModel>>((ref) {
+  final user = ref.watch(currentUserProvider);
+  if (user == null || user.role != UserRole.gc) return Stream.value([]);
+  return DatabaseService.tasksAssignedByStream(user.uid);
 });

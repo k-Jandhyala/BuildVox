@@ -7,6 +7,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/extracted_item_card.dart';
 import '../../widgets/loading_overlay.dart';
 import '../../widgets/account_menu_button.dart';
+import 'admin_summary_screen.dart';
 
 class AdminHome extends ConsumerStatefulWidget {
   const AdminHome({super.key});
@@ -28,6 +29,7 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
       body: IndexedStack(
         index: _selectedIndex,
         children: const [
+          AdminSummaryScreen(),
           _SeedTab(),
           _AllItemsTab(),
         ],
@@ -36,6 +38,11 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),
         destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights_rounded),
+            label: 'Summary',
+          ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),

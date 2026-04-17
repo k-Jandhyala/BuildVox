@@ -299,44 +299,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+              // Two-line layout so Manager/Admin are always visible (no cut-off).
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
                   children: _demoAccounts.map((account) {
                     final selected = _emailCtrl.text == account.$2;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: FilterChip(
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                        avatar: Icon(
-                          account.$3,
-                          size: 18,
-                          color: selected ? BVColors.background : BVColors.primary,
-                        ),
-                        selected: selected,
-                        showCheckmark: false,
-                        selectedColor: BVColors.primary,
-                        backgroundColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          side: const BorderSide(color: BVColors.primary),
-                        ),
-                        label: Text(
-                          account.$1,
-                          style: TextStyle(
-                            color: selected ? BVColors.background : BVColors.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        onSelected: _loading
-                            ? null
-                            : (_) {
-                                setState(() {
-                                  _emailCtrl.text = account.$2;
-                                  _passwordCtrl.text = 'BuildVox2024!';
-                                });
-                              },
+                    return FilterChip(
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                      avatar: Icon(
+                        account.$3,
+                        size: 18,
+                        color: selected ? BVColors.background : BVColors.primary,
                       ),
+                      selected: selected,
+                      showCheckmark: false,
+                      selectedColor: BVColors.primary,
+                      backgroundColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        side: const BorderSide(color: BVColors.primary),
+                      ),
+                      label: Text(
+                        account.$1,
+                        style: TextStyle(
+                          color:
+                              selected ? BVColors.background : BVColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onSelected: _loading
+                          ? null
+                          : (_) {
+                              setState(() {
+                                _emailCtrl.text = account.$2;
+                                _passwordCtrl.text = 'BuildVox2024!';
+                              });
+                            },
                     );
                   }).toList(),
                 ),

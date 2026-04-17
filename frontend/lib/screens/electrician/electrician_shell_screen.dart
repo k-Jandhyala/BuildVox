@@ -148,7 +148,8 @@ class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen>
           ElectricianProfileScreen(),
         ],
       ),
-      bottomNavigationBar: _IndustrialBottomBar(
+      // Intentionally matches the Plumber bottom bar UI for consistency.
+      bottomNavigationBar: _ElectricianBottomBar(
         selectedIndex: _tab,
         warningCount: queuedCount,
         onSelect: (index) => setState(() => _tab = index),
@@ -208,154 +209,104 @@ class _JobsiteSheet extends StatelessWidget {
   }
 }
 
-class _IndustrialBottomBar extends StatefulWidget {
+class _ElectricianBottomBar extends StatelessWidget {
   final int selectedIndex;
   final int warningCount;
   final ValueChanged<int> onSelect;
 
-  const _IndustrialBottomBar({
+  const _ElectricianBottomBar({
     required this.selectedIndex,
     required this.warningCount,
     required this.onSelect,
   });
 
   @override
-  State<_IndustrialBottomBar> createState() => _IndustrialBottomBarState();
-}
-
-class _IndustrialBottomBarState extends State<_IndustrialBottomBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 240),
-    lowerBound: 0.95,
-    upperBound: 1,
-    value: 1,
-  );
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final items = [
-      (Icons.home_outlined, 'Home'),
-      (Icons.assignment_outlined, 'Tasks'),
-      (Icons.warning_amber_rounded, 'Warnings'),
-      (Icons.person_outline_rounded, 'Profile'),
-    ];
-
-    return SizedBox(
-      height: 102,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: BVColors.surface,
-                border: Border(top: BorderSide(color: BVColors.divider)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  for (int i = 0; i < items.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: _NavItem(
-                        icon: items[i].$1,
-                        label: items[i].$2,
-                        selected: widget.selectedIndex == (i >= 2 ? i + 1 : i),
-                        badgeCount: items[i].$2 == 'Warnings' ? widget.warningCount : 0,
-                        onTap: () => widget.onSelect(i >= 2 ? i + 1 : i),
-                      ),
-                    ),
-                ],
+    final color =
+        (int i) => selectedIndex == i ? BVColors.primary : BVColors.textSecondary;
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 102,
+        decoration: const BoxDecoration(
+          color: BVColors.surface,
+          border: Border(top: BorderSide(color: BVColors.divider)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: _item(Icons.home_outlined, 'Home', color(0), () => onSelect(0)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: _item(
+                  Icons.assignment_outlined, 'Tasks', color(1), () => onSelect(1)),
+            ),
+            GestureDetector(
+              onTap: () => onSelect(2),
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: const BoxDecoration(
+                  color: BVColors.primary,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black54,
+                      blurRadius: 14,
+                      offset: Offset(0, 8),
+                    )
+                  ],
+                ),
+                child: const Icon(Icons.mic_rounded, size: 32, color: Colors.white),
               ),
             ),
-          ),
-          Positioned(
-            top: -22,
-            left: MediaQuery.sizeOf(context).width / 2 - 36,
-            child: ScaleTransition(
-              scale: _pulse,
-              child: GestureDetector(
-                onTapDown: (_) => _pulse.reverse(),
-                onTapUp: (_) {
-                  _pulse.forward();
-                  widget.onSelect(2);
-                },
-                child: Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: BVColors.primary,
-                    shape: BoxShape.circle,
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black54,
-                        blurRadius: 14,
-                        offset: Offset(0, 8),
-                      )
-                    ],
-                  ),
-                  child: const Icon(Icons.mic_rounded, size: 32, color: Colors.white),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Badge(
+                isLabelVisible: warningCount > 0,
+                label: Text('$warningCount'),
+                backgroundColor: BVColors.blocker,
+                child: _item(
+                  Icons.warning_amber_rounded,
+                  'Warnings',
+                  color(3),
+                  () => onSelect(3),
                 ),
               ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: _item(Icons.person_outline_rounded, 'Profile', color(4),
+                  () => onSelect(4)),
+            ),
+          ],
+        ),
       ),
     );
   }
-}
 
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final int badgeCount;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.badgeCount,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? BVColors.primary : BVColors.textSecondary;
+  Widget _item(IconData icon, String label, Color color, VoidCallback onTap) {
     return SizedBox(
       width: 70,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Badge(
-                isLabelVisible: badgeCount > 0,
-                backgroundColor: BVColors.blocker,
-                label: Text('$badgeCount'),
-                child: Icon(icon, size: 24, color: color),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(label,
+                style: TextStyle(
+                    color: color, fontSize: 13, fontWeight: FontWeight.w600)),
+          ],
         ),
       ),
     );
   }
 }
+
+// _NavItem removed (Electrician now uses the same bottom bar style as Plumber).
