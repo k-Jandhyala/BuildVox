@@ -367,9 +367,24 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
 
   @override
   Widget build(BuildContext context) {
+    // Focus when this tab becomes visible (IndexedStack keeps all children built).
+    ref.listen<int>(tradeWorkerShellTabProvider, (prev, next) {
+      if (next == 2) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _focusNode.requestFocus();
+        });
+      } else {
+        _focusNode.unfocus();
+      }
+    });
+
+    // Re-tap "Add Update" / center button while already on this tab.
     ref.listen<int>(recordScreenAutofocusTriggerProvider, (prev, next) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focusNode.requestFocus();
+        if (!mounted) return;
+        if (ref.read(tradeWorkerShellTabProvider) == 2) {
+          _focusNode.requestFocus();
+        }
       });
     });
 
@@ -394,7 +409,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
           const Text(
-            'Field Note',
+            'New Update',
             style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
@@ -475,7 +490,10 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
                   keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
                   textCapitalization: TextCapitalization.sentences,
+                  autocorrect: true,
+                  enableSuggestions: true,
                   style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.35),
                   cursorColor: BVColors.primary,
                   decoration: InputDecoration(
@@ -505,7 +523,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
                 right: 10,
                 bottom: 8,
                 child: Text(
-                  '$words words',
+                  '${text.length} chars · $words words',
                   style: TextStyle(
                     color: BVColors.textSecondary.withValues(alpha: 0.9),
                     fontSize: 12,
@@ -515,17 +533,27 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
             ],
           ),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _attachPhoto,
-            icon: const Icon(Icons.photo_camera_outlined, size: 20),
+          Badge(
+            isLabelVisible: _photos.isNotEmpty,
             label: Text(
-              _photos.isEmpty ? 'Attach photos' : 'Attach photos (${_photos.length})',
+              '${_photos.length}',
+              style: const TextStyle(
+                color: BVColors.onPrimary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: BVColors.primary,
-              side: const BorderSide(color: BVColors.primary),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            backgroundColor: BVColors.primary,
+            child: OutlinedButton.icon(
+              onPressed: _attachPhoto,
+              icon: const Icon(Icons.photo_camera_outlined, size: 20),
+              label: const Text('Attach photos'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: BVColors.primary,
+                side: const BorderSide(color: BVColors.primary),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
           ),
           if (_photos.isNotEmpty) ...[
