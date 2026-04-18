@@ -52,6 +52,27 @@ const extractionResponseSchema = {
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
+/** Typed field notes (primary product flow): user pastes/types text; same extraction schema as audio. */
+const TEXT_FIELD_NOTE_PROMPT = `You are a construction site communication assistant.
+
+The user typed a construction field note, update, request, or report on a job site. Extract ALL distinct action items, issues, blockers, material requests, work orders, schedule impacts, or progress updates mentioned in the text.
+
+For each item, classify:
+- trade: which trade is involved (electrical, plumbing, framing, drywall, paint, general, inspection, other)
+- tier:
+  * issue_or_blocker — a problem that is blocking work or needs GC attention
+  * material_request — a request for materials or supplies
+  * progress_update — a status update on completed or ongoing work (no action needed)
+  * schedule_change — a change in timeline that affects other trades
+- urgency: low, medium, high, critical
+- needs_gc_attention: true if the GC should be notified
+- needs_trade_manager_attention: true if the trade company manager should be notified
+- downstream_trades: list of trades that would be impacted by a schedule change
+- recommended_company_type: which trade company should handle this item
+
+Return ALL distinct items. One message may contain multiple items.
+Be specific and accurate in summaries. Do not invent information not present in the text.`;
+
 const SYSTEM_PROMPT = `You are a construction site communication assistant.
 
 Your job is to listen to a voice memo from a construction worker and extract ALL distinct action items, issues, or updates mentioned.
@@ -269,6 +290,52 @@ export async function extractFromAudio(
   try {
     parsed = JSON.parse(responseText);
   } catch (e) {
+    throw new Error(
+      `Gemini returned invalid JSON: ${responseText.substring(0, 200)}`
+    );
+  }
+
+  return validateGeminiResponse(parsed);
+}
+
+/**
+ * Primary typed-input flow: send raw field-note text to Gemini with the same JSON schema as audio.
+ */
+export async function extractFromText(
+  userText: string
+): Promise<GeminiExtractionResult> {
+  const trimmed = userText.trim();
+  if (!trimmed) {
+    throw new Error("extractFromText: empty text");
+  }
+
+  if (isDemoMode()) {
+    console.log("[DEMO MODE] extractFromText: returning canned extraction");
+    return generateDemoExtraction();
+  }
+
+  const apiKey = getGeminiApiKey();
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: extractionResponseSchema as any,
+    },
+  });
+
+  console.log("[Gemini] extractFromText: sending text to Gemini...");
+  const result = await model.generateContent([
+    TEXT_FIELD_NOTE_PROMPT,
+    { text: `Construction field note:\n\n${trimmed}` },
+  ]);
+  const responseText = result.response.text();
+  console.log("[Gemini] extractFromText: response length:", responseText.length);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
     throw new Error(
       `Gemini returned invalid JSON: ${responseText.substring(0, 200)}`
     );

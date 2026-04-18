@@ -242,3 +242,22 @@ export function validateSubmitReviewedItemsPayload(
     >[],
   };
 }
+
+export function validateEscalateTaskPayload(data: unknown): {
+  taskId: string;
+  reason: string;
+  details: string;
+} {
+  if (typeof data !== "object" || data === null) {
+    throw new Error("Invalid request payload");
+  }
+  const d = data as Record<string, unknown>;
+  if (!isString(d.taskId)) throw new Error("taskId is required");
+  if (!isString(d.reason)) throw new Error("reason is required");
+  if (!isString(d.details)) throw new Error("details is required");
+  return {
+    taskId: d.taskId,
+    reason: d.reason.trim(),
+    details: d.details.trim(),
+  };
+}

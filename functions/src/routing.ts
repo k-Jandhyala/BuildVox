@@ -66,24 +66,17 @@ export async function loadUsersForProject(
   return data.map((d) => rowToUserDoc(d as Record<string, unknown>));
 }
 
-export async function determineRecipients(
+/**
+ * Pure routing: who should receive notifications for this extracted item given project + companies.
+ * Used by determineRecipients and by smoke tests (no DB).
+ */
+export function computeRecipientRouting(
   item: GeminiExtractedItem,
-  projectId: string
-): Promise<{ recipientUserIds: string[]; recipientCompanyIds: string[] }> {
-  const [project, companies] = await Promise.all([
-    loadProject(projectId),
-    loadCompaniesForProject(projectId),
-  ]);
-
+  project: ProjectDoc,
+  companies: CompanyDoc[]
+): { recipientUserIds: string[]; recipientCompanyIds: string[] } {
   const recipientUserIds: string[] = [];
   const recipientCompanyIds: string[] = [];
-
-  if (!project) {
-    console.warn(
-      `[routing] Project ${projectId} not found; no recipients determined`
-    );
-    return { recipientUserIds, recipientCompanyIds };
-  }
 
   const gcUserIds = project.gcUserIds || [];
 
@@ -138,6 +131,25 @@ export async function determineRecipients(
     recipientUserIds: [...new Set(recipientUserIds)],
     recipientCompanyIds: [...new Set(recipientCompanyIds)],
   };
+}
+
+export async function determineRecipients(
+  item: GeminiExtractedItem,
+  projectId: string
+): Promise<{ recipientUserIds: string[]; recipientCompanyIds: string[] }> {
+  const [project, companies] = await Promise.all([
+    loadProject(projectId),
+    loadCompaniesForProject(projectId),
+  ]);
+
+  if (!project) {
+    console.warn(
+      `[routing] Project ${projectId} not found; no recipients determined`
+    );
+    return { recipientUserIds: [], recipientCompanyIds: [] };
+  }
+
+  return computeRecipientRouting(item, project, companies);
 }
 
 export async function sendFcmNotifications(

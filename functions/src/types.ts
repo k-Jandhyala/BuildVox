@@ -38,7 +38,8 @@ export type NotificationType =
   | "new_schedule_change"
   | "task_assigned"
   | "material_request"
-  | "task_updated";
+  | "task_updated"
+  | "task_escalated";
 
 // ─── Firestore Document Shapes ────────────────────────────────────────────────
 

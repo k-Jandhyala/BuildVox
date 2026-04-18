@@ -4,9 +4,14 @@ dotenv.config();
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { randomUUID } from "crypto";
-import { extractFromAudio } from "./gemini";
+import { extractFromAudio, extractFromText } from "./gemini";
+import {
+  persistGeminiExtractedItems,
+  ensureSelfTaskForExtractedItem,
+} from "./persistItems";
 import {
   determineRecipients,
+  loadProject,
   sendFcmNotifications,
   createNotificationDocs,
   buildNotificationContent,
@@ -17,6 +22,7 @@ import {
   validateUpdateTaskStatusPayload,
   validatePollVoiceMemoPayload,
   validateSubmitReviewedItemsPayload,
+  validateEscalateTaskPayload,
 } from "./validators";
 import { seedDemoData } from "./seed";
 import { getSupabase } from "./supabaseAdmin";
@@ -31,9 +37,12 @@ import {
   AssignTaskResponse,
   UpdateTaskStatusResponse,
   GenerateDailyDigestResponse,
-  GeminiExtractedItem,
   TaskStatus,
 } from "./types";
+import {
+  buildGeminiLikeItem,
+  isUuidV4,
+} from "./reviewPayload";
 
 admin.initializeApp();
 
@@ -47,68 +56,95 @@ function jsonOk(res: functions.Response, data: unknown) {
   res.status(200).json(data);
 }
 
-function mapCategoryToTier(category: string): string {
-  switch ((category || "").toLowerCase()) {
-    case "blocker":
-      return "issue_or_blocker";
-    case "materialrequest":
-    case "material_request":
-    case "material request":
-      return "material_request";
-    case "scheduleissue":
-    case "schedule_issue":
-    case "schedule issue":
-      return "schedule_change";
-    default:
-      return "progress_update";
+/** Inserts extracted_items from client JSON (AI review screen or manual fallback). */
+async function persistClientPayloadItems(params: {
+  supabase: ReturnType<typeof getSupabase>;
+  items: Record<string, unknown>[];
+  memoId: string;
+  projectId: string;
+  siteId: string;
+  uid: string;
+  userTrade: string;
+}): Promise<number> {
+  const { supabase, items, memoId, projectId, siteId, uid, userTrade } =
+    params;
+  let insertedCount = 0;
+  for (const raw of items) {
+    const normalizedSummary = String(raw.summary || "").trim();
+    if (!normalizedSummary) continue;
+
+    const geminiLike = buildGeminiLikeItem(raw, userTrade || "other");
+    const { recipientUserIds, recipientCompanyIds } = await determineRecipients(
+      geminiLike,
+      projectId
+    );
+
+    const itemId = randomUUID();
+    const { error: itemErr } = await supabase.from("extracted_items").insert({
+      id: itemId,
+      memo_id: memoId,
+      project_id: projectId,
+      site_id: siteId,
+      created_by: uid,
+      source_text: geminiLike.source_text,
+      normalized_summary: geminiLike.normalized_summary,
+      trade: geminiLike.trade,
+      tier: geminiLike.tier,
+      urgency: geminiLike.urgency,
+      unit_or_area: geminiLike.unit_or_area || null,
+      needs_gc_attention: geminiLike.needs_gc_attention,
+      needs_trade_manager_attention: geminiLike.needs_trade_manager_attention,
+      downstream_trades: geminiLike.downstream_trades,
+      recommended_company_type: geminiLike.recommended_company_type,
+      action_required: geminiLike.action_required,
+      suggested_next_step: geminiLike.suggested_next_step,
+      recipient_user_ids: recipientUserIds,
+      recipient_company_ids: recipientCompanyIds,
+      status: "pending",
+    });
+    if (itemErr) {
+      console.error("[persistClientPayloadItems] insert failed", itemErr);
+      continue;
+    }
+
+    insertedCount++;
+
+    await ensureSelfTaskForExtractedItem({
+      supabase,
+      extractedItemId: itemId,
+      workerUserId: uid,
+      projectId,
+      siteId,
+      tier: geminiLike.tier,
+    });
+
+    if (geminiLike.tier !== "progress_update") {
+      const { title, body, type } = buildNotificationContent(
+        geminiLike.tier,
+        geminiLike.trade,
+        geminiLike.normalized_summary,
+        geminiLike.urgency
+      );
+      createNotificationDocs(
+        recipientUserIds,
+        recipientCompanyIds,
+        title,
+        body,
+        type,
+        itemId
+      ).catch((err) =>
+        console.error("[persistClientPayloadItems] notification docs failed:", err)
+      );
+      sendFcmNotifications(recipientUserIds, recipientCompanyIds, title, body, {
+        type,
+        extractedItemId: itemId,
+        projectId,
+      }).catch((err) =>
+        console.error("[persistClientPayloadItems] FCM failed:", err)
+      );
+    }
   }
-}
-
-function mapPriorityToUrgency(priority: string): string {
-  switch ((priority || "").toLowerCase()) {
-    case "critical":
-      return "critical";
-    case "high":
-      return "high";
-    case "low":
-      return "low";
-    default:
-      return "medium";
-  }
-}
-
-function buildGeminiLikeItem(
-  raw: Record<string, unknown>,
-  fallbackTrade: string
-): GeminiExtractedItem {
-  const category = String(raw.category || "taskUpdate");
-  const isBlocker = Boolean(raw.isBlocker);
-  const isMaterialRequest = Boolean(raw.isMaterialRequest);
-  const tier = isBlocker
-    ? "issue_or_blocker"
-    : isMaterialRequest
-      ? "material_request"
-      : mapCategoryToTier(category);
-  const trade = String(raw.relatedTrade || fallbackTrade || "other");
-  const urgency = mapPriorityToUrgency(String(raw.priority || "medium"));
-  const summary = String(raw.summary || "").trim();
-
-  return {
-    source_text: String(raw.transcriptSegment || ""),
-    normalized_summary: summary,
-    trade: trade as any,
-    tier: tier as any,
-    urgency: urgency as any,
-    project_ref: null,
-    job_site_ref: null,
-    unit_or_area: String(raw.location || "") || null,
-    needs_gc_attention: isBlocker || tier === "schedule_change",
-    needs_trade_manager_attention: isMaterialRequest || tier === "material_request",
-    downstream_trades: [],
-    recommended_company_type: trade as any,
-    action_required: true,
-    suggested_next_step: String(raw.notes || "Review and route."),
-  };
+  return insertedCount;
 }
 
 export const submitVoiceMemo = functions
@@ -184,74 +220,14 @@ export const submitVoiceMemo = functions
         payload.mimeType
       );
 
-      for (const geminiItem of extraction.items) {
-        const { recipientUserIds, recipientCompanyIds } =
-          await determineRecipients(geminiItem, payload.projectId);
-
-        const itemId = randomUUID();
-        const { error: itemErr } = await supabase.from("extracted_items").insert({
-          id: itemId,
-          memo_id: memoId,
-          project_id: payload.projectId,
-          site_id: payload.siteId,
-          created_by: uid,
-          source_text: geminiItem.source_text,
-          normalized_summary: geminiItem.normalized_summary,
-          trade: geminiItem.trade,
-          tier: geminiItem.tier,
-          urgency: geminiItem.urgency,
-          unit_or_area: geminiItem.unit_or_area || null,
-          needs_gc_attention: geminiItem.needs_gc_attention,
-          needs_trade_manager_attention:
-            geminiItem.needs_trade_manager_attention,
-          downstream_trades: geminiItem.downstream_trades,
-          recommended_company_type: geminiItem.recommended_company_type,
-          action_required: geminiItem.action_required,
-          suggested_next_step: geminiItem.suggested_next_step,
-          recipient_user_ids: recipientUserIds,
-          recipient_company_ids: recipientCompanyIds,
-          status: "pending",
-        });
-
-        if (itemErr) {
-          console.error("[submitVoiceMemo] item insert failed:", itemErr);
-          continue;
-        }
-
-        if (geminiItem.tier !== "progress_update") {
-          const { title, body, type } = buildNotificationContent(
-            geminiItem.tier,
-            geminiItem.trade,
-            geminiItem.normalized_summary,
-            geminiItem.urgency
-          );
-
-          createNotificationDocs(
-            recipientUserIds,
-            recipientCompanyIds,
-            title,
-            body,
-            type,
-            itemId
-          ).catch((err) =>
-            console.error("[notifications] Failed to create docs:", err)
-          );
-
-          sendFcmNotifications(
-            recipientUserIds,
-            recipientCompanyIds,
-            title,
-            body,
-            {
-              type,
-              extractedItemId: itemId,
-              projectId: payload.projectId,
-            }
-          ).catch((err) =>
-            console.error("[FCM] Failed to send notifications:", err)
-          );
-        }
-      }
+      await persistGeminiExtractedItems({
+        supabase,
+        items: extraction.items,
+        memoId,
+        projectId: payload.projectId,
+        siteId: payload.siteId,
+        createdBy: uid,
+      });
 
       await supabase
         .from("voice_memos")
@@ -489,7 +465,7 @@ export const pollVoiceMemoProcessing = functions.https.onRequest(async (req, res
 });
 
 export const submitReviewedItems = functions
-  .runWith({ timeoutSeconds: 180, memory: "512MB" })
+  .runWith({ timeoutSeconds: 300, memory: "512MB" })
   .https.onRequest(async (req, res) => {
     setCors(res);
     if (req.method === "OPTIONS") {
@@ -529,93 +505,138 @@ export const submitReviewedItems = functions
     }
 
     const supabase = getSupabase();
-    const { data: reqRow, error: reqErr } = await supabase
-      .from("ai_review_requests")
-      .select("*")
-      .eq("id", payload.requestId)
-      .eq("created_by", uid)
-      .maybeSingle();
-    if (reqErr || !reqRow) {
-      jsonErr(res, 404, "AI review request not found");
-      return;
-    }
-    const request = reqRow as Record<string, unknown>;
-    const memoId = String(request.memo_id);
+    const userTrade = userDoc.trade || "other";
+    const fromAiReview = isUuidV4(payload.requestId);
 
-    let insertedCount = 0;
-    for (const raw of payload.items) {
-      const normalizedSummary = String(raw.summary || "").trim();
-      if (!normalizedSummary) continue;
+    console.log(
+      `[submitReviewedItems] requestId=${payload.requestId} | aiReview=${fromAiReview} | items=${payload.items.length} | user=${uid}`
+    );
 
-      const geminiLike = buildGeminiLikeItem(raw, userDoc.trade || "other");
-      const { recipientUserIds, recipientCompanyIds } = await determineRecipients(
-        geminiLike,
-        payload.projectId
-      );
+    let memoId: string;
+    let shouldMarkAiReviewSubmitted = false;
 
-      const itemId = randomUUID();
-      const { error: itemErr } = await supabase.from("extracted_items").insert({
-        id: itemId,
-        memo_id: memoId,
-        project_id: payload.projectId,
-        site_id: payload.siteId,
-        created_by: uid,
-        source_text: geminiLike.source_text,
-        normalized_summary: geminiLike.normalized_summary,
-        trade: geminiLike.trade,
-        tier: geminiLike.tier,
-        urgency: geminiLike.urgency,
-        unit_or_area: geminiLike.unit_or_area || null,
-        needs_gc_attention: geminiLike.needs_gc_attention,
-        needs_trade_manager_attention: geminiLike.needs_trade_manager_attention,
-        downstream_trades: geminiLike.downstream_trades,
-        recommended_company_type: geminiLike.recommended_company_type,
-        action_required: geminiLike.action_required,
-        suggested_next_step: geminiLike.suggested_next_step,
-        recipient_user_ids: recipientUserIds,
-        recipient_company_ids: recipientCompanyIds,
-        status: "pending",
-      });
-      if (itemErr) {
-        console.error("[submitReviewedItems] item insert failed", itemErr);
-        continue;
+    if (fromAiReview) {
+      const { data: reqRow, error: reqErr } = await supabase
+        .from("ai_review_requests")
+        .select("*")
+        .eq("id", payload.requestId)
+        .eq("created_by", uid)
+        .maybeSingle();
+
+      if (reqErr || !reqRow) {
+        jsonErr(res, 404, "AI review request not found");
+        return;
       }
+      memoId = String((reqRow as Record<string, unknown>).memo_id);
+      shouldMarkAiReviewSubmitted = true;
+    } else {
+      const typedFieldNote = payload.requestId.startsWith("field_note");
 
-      insertedCount++;
-      if (geminiLike.tier !== "progress_update") {
-        const { title, body, type } = buildNotificationContent(
-          geminiLike.tier,
-          geminiLike.trade,
-          geminiLike.normalized_summary,
-          geminiLike.urgency
-        );
-        createNotificationDocs(
-          recipientUserIds,
-          recipientCompanyIds,
-          title,
-          body,
-          type,
-          itemId
-        ).catch((err) =>
-          console.error("[submitReviewedItems] notification docs failed:", err)
-        );
-        sendFcmNotifications(recipientUserIds, recipientCompanyIds, title, body, {
-          type,
-          extractedItemId: itemId,
-          projectId: payload.projectId,
-        }).catch((err) =>
-          console.error("[submitReviewedItems] FCM failed:", err)
-        );
+      const { data: memoRow, error: memoErr } = await supabase
+        .from("voice_memos")
+        .insert({
+          created_by: uid,
+          user_role: userDoc.role,
+          company_id: userDoc.companyId ?? null,
+          project_id: payload.projectId,
+          site_id: payload.siteId,
+          storage_path: null,
+          audio_url: null,
+          transcript_status: typedFieldNote ? "processing" : "completed",
+          processing_status: typedFieldNote ? "processing" : "completed",
+          overall_summary: typedFieldNote
+            ? null
+            : `Submission: ${payload.items.length} item(s)`,
+          detected_language: "en",
+        })
+        .select()
+        .single();
+
+      if (memoErr || !memoRow) {
+        jsonErr(res, 500, memoErr?.message || "Failed to create memo record");
+        return;
+      }
+      memoId = memoRow.id as string;
+
+      if (typedFieldNote) {
+        const rawText = payload.items
+          .map((i) => String(i.transcriptSegment || "").trim())
+          .filter(Boolean)
+          .join("\n\n");
+        if (!rawText) {
+          jsonErr(res, 400, "typed text (transcriptSegment) is required");
+          return;
+        }
+
+        try {
+          const extraction = await extractFromText(rawText);
+          await supabase
+            .from("voice_memos")
+            .update({
+              transcript_status: "completed",
+              processing_status: "completed",
+              overall_summary: extraction.overall_summary,
+              raw_transcript: rawText,
+              detected_language: extraction.language,
+            })
+            .eq("id", memoId);
+
+          const insertedCount = await persistGeminiExtractedItems({
+            supabase,
+            items: extraction.items,
+            memoId,
+            projectId: payload.projectId,
+            siteId: payload.siteId,
+            createdBy: uid,
+          });
+
+          jsonOk(res, {
+            success: true,
+            itemCount: insertedCount,
+            overallSummary: extraction.overall_summary,
+          });
+          return;
+        } catch (err: any) {
+          console.error(
+            "[submitReviewedItems] Gemini text failed; falling back to client items",
+            err
+          );
+          await supabase
+            .from("voice_memos")
+            .update({
+              transcript_status: "completed",
+              processing_status: "completed",
+              overall_summary: `Typed submission (AI fallback): ${payload.items.length} item(s)`,
+              raw_transcript: rawText,
+              error_message: String(err?.message || "Gemini error").substring(
+                0,
+                500
+              ),
+            })
+            .eq("id", memoId);
+        }
       }
     }
 
-    await supabase
-      .from("ai_review_requests")
-      .update({
-        status: "submitted",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", payload.requestId);
+    const insertedCount = await persistClientPayloadItems({
+      supabase,
+      items: payload.items,
+      memoId,
+      projectId: payload.projectId,
+      siteId: payload.siteId,
+      uid,
+      userTrade,
+    });
+
+    if (shouldMarkAiReviewSubmitted) {
+      await supabase
+        .from("ai_review_requests")
+        .update({
+          status: "submitted",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payload.requestId);
+    }
 
     jsonOk(res, { success: true, itemCount: insertedCount });
   });
@@ -686,22 +707,64 @@ export const assignTask = functions.https.onRequest(
 
     const worker = workerRow as Record<string, unknown>;
 
-    const taskId = randomUUID();
-    const { error: tErr } = await supabase.from("task_assignments").insert({
-      id: taskId,
-      extracted_item_id: payload.extractedItemId,
-      assigned_to_user_id: payload.assignedToUserId,
-      assigned_by_user_id: assignerUid,
-      company_id: worker.company_id,
-      project_id: item.project_id,
-      site_id: item.site_id,
-      status: "pending" as TaskStatus,
-      due_date: payload.dueDate ? new Date(payload.dueDate).toISOString() : null,
-    });
+    const { data: existingRows, error: exErr } = await supabase
+      .from("task_assignments")
+      .select("id")
+      .eq("extracted_item_id", payload.extractedItemId)
+      .limit(1);
 
-    if (tErr) {
-      jsonErr(res, 500, tErr.message);
+    if (exErr) {
+      jsonErr(res, 500, exErr.message);
       return;
+    }
+
+    const existingId =
+      existingRows && existingRows.length > 0
+        ? (existingRows[0] as { id: string }).id
+        : null;
+
+    let taskId: string;
+
+    if (existingId) {
+      taskId = existingId;
+      const { error: upErr } = await supabase
+        .from("task_assignments")
+        .update({
+          assigned_to_user_id: payload.assignedToUserId,
+          assigned_by_user_id: assignerUid,
+          company_id: worker.company_id,
+          due_date: payload.dueDate
+            ? new Date(payload.dueDate).toISOString()
+            : null,
+          status: "pending" as TaskStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", taskId);
+
+      if (upErr) {
+        jsonErr(res, 500, upErr.message);
+        return;
+      }
+    } else {
+      taskId = randomUUID();
+      const { error: tErr } = await supabase.from("task_assignments").insert({
+        id: taskId,
+        extracted_item_id: payload.extractedItemId,
+        assigned_to_user_id: payload.assignedToUserId,
+        assigned_by_user_id: assignerUid,
+        company_id: worker.company_id,
+        project_id: item.project_id,
+        site_id: item.site_id,
+        status: "pending" as TaskStatus,
+        due_date: payload.dueDate
+          ? new Date(payload.dueDate).toISOString()
+          : null,
+      });
+
+      if (tErr) {
+        jsonErr(res, 500, tErr.message);
+        return;
+      }
     }
 
     await supabase
@@ -735,6 +798,116 @@ export const assignTask = functions.https.onRequest(
 
     const out: AssignTaskResponse = { success: true, taskId };
     jsonOk(res, out);
+  }
+);
+
+/** Worker escalates an assigned task; GC + trade managers are notified (matches Flutter escalateTask). */
+export const escalateTask = functions.https.onRequest(
+  async (req, res): Promise<void> => {
+    setCors(res);
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
+    if (req.method !== "POST") {
+      jsonErr(res, 405, "Method not allowed");
+      return;
+    }
+    let uid: string;
+    try {
+      uid = await getSupabaseUserIdFromBearer(req);
+    } catch (e: any) {
+      jsonErr(res, 401, e.message || "Unauthorized");
+      return;
+    }
+
+    let payload: { taskId: string; reason: string; details: string };
+    try {
+      payload = validateEscalateTaskPayload(readJsonBody(req));
+    } catch (e: any) {
+      jsonErr(res, 400, e.message);
+      return;
+    }
+
+    const user = await getUserDoc(uid);
+    const supabase = getSupabase();
+
+    const { data: taskRow, error: taskErr } = await supabase
+      .from("task_assignments")
+      .select("*")
+      .eq("id", payload.taskId)
+      .maybeSingle();
+
+    if (taskErr || !taskRow) {
+      jsonErr(res, 404, "Task not found.");
+      return;
+    }
+
+    const task = taskRow as Record<string, unknown>;
+    const assignedTo = task.assigned_to_user_id as string;
+    const canEscalate = assignedTo === uid || user.role === "admin";
+    if (!canEscalate) {
+      jsonErr(res, 403, "Only the assignee can escalate this task.");
+      return;
+    }
+
+    const projectId = task.project_id as string;
+    const siteId = task.site_id as string;
+    const extractedItemId = task.extracted_item_id as string;
+
+    const escalationId = randomUUID();
+    const { error: insErr } = await supabase.from("task_escalations").insert({
+      id: escalationId,
+      task_id: payload.taskId,
+      escalated_by: uid,
+      reason: payload.reason,
+      details: payload.details,
+      project_id: projectId,
+      site_id: siteId,
+    });
+
+    if (insErr) {
+      jsonErr(res, 500, insErr.message);
+      return;
+    }
+
+    const project = await loadProject(projectId);
+    const gcUserIds = project?.gcUserIds ?? [];
+
+    const workerCompanyId = (task.company_id as string) || "";
+    const recipientCompanyIds: string[] = [];
+    if (workerCompanyId) {
+      recipientCompanyIds.push(workerCompanyId);
+    }
+
+    const title = "Task escalated";
+    const body =
+      `${payload.reason}: ${payload.details}`.substring(0, 200) ||
+      "A worker escalated a task.";
+
+    await createNotificationDocs(
+      gcUserIds,
+      recipientCompanyIds,
+      title,
+      body,
+      "task_escalated",
+      extractedItemId
+    );
+
+    sendFcmNotifications(
+      gcUserIds,
+      recipientCompanyIds,
+      title,
+      body,
+      {
+        type: "task_escalated",
+        taskId: payload.taskId,
+        escalationId,
+        projectId,
+      }
+    ).catch(console.error);
+
+    jsonOk(res, { success: true, escalationId });
   }
 );
 
