@@ -69,13 +69,24 @@ class ElectricianHomeScreen extends ConsumerWidget {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
-          children: const [
-            _QuickActionChip(icon: Icons.edit_note_rounded, label: 'Add Update'),
-            _QuickActionChip(icon: Icons.inventory_2_rounded, label: 'Request Materials'),
-            _QuickActionChip(icon: Icons.assignment_late_rounded, label: 'Raise Work Order'),
-            _QuickActionChip(
+          children: [
+            Consumer(
+              builder: (context, ref, _) {
+                return _QuickActionChip(
+                  icon: Icons.edit_note_rounded,
+                  label: 'Add Update',
+                  onTap: () {
+                    ref.read(tradeWorkerShellTabProvider.notifier).state = 2;
+                    ref.read(recordScreenAutofocusTriggerProvider.notifier).state++;
+                  },
+                );
+              },
+            ),
+            const _QuickActionChip(icon: Icons.inventory_2_rounded, label: 'Request Materials'),
+            const _QuickActionChip(icon: Icons.assignment_late_rounded, label: 'Raise Work Order'),
+            const _QuickActionChip(
                 icon: Icons.report_problem_rounded, label: 'Flag Blocker', danger: true),
-            _QuickActionChip(icon: Icons.map_outlined, label: 'View Site Plan'),
+            const _QuickActionChip(icon: Icons.map_outlined, label: 'View Site Plan'),
           ],
         ),
         const SizedBox(height: 16),
@@ -249,11 +260,17 @@ class _QuickActionChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool danger;
-  const _QuickActionChip({required this.icon, required this.label, this.danger = false});
+  final VoidCallback? onTap;
+  const _QuickActionChip({
+    required this.icon,
+    required this.label,
+    this.danger = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: BVColors.surface,
@@ -274,6 +291,15 @@ class _QuickActionChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return child;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: child,
       ),
     );
   }

@@ -20,10 +20,9 @@ class ElectricianShellScreen extends ConsumerStatefulWidget {
 }
 
 class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen> {
-  int _tab = 0;
-
   @override
   Widget build(BuildContext context) {
+    final tab = ref.watch(tradeWorkerShellTabProvider);
     final jobsites = ref.watch(electricianJobsitesProvider);
     final selectedSiteId = ref.watch(selectedElectricianSiteProvider).valueOrNull;
     final queue = ref.watch(electricianQueueProvider).valueOrNull ?? const [];
@@ -139,7 +138,7 @@ class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen>
         ),
       ),
       body: IndexedStack(
-        index: _tab,
+        index: tab,
         children: const [
           ElectricianHomeScreen(),
           ElectricianTasksScreen(),
@@ -150,9 +149,14 @@ class _ElectricianShellScreenState extends ConsumerState<ElectricianShellScreen>
       ),
       // Intentionally matches the Plumber bottom bar UI for consistency.
       bottomNavigationBar: _ElectricianBottomBar(
-        selectedIndex: _tab,
+        selectedIndex: tab,
         warningCount: queuedCount,
-        onSelect: (index) => setState(() => _tab = index),
+        onSelect: (index) {
+          ref.read(tradeWorkerShellTabProvider.notifier).state = index;
+          if (index == 2) {
+            ref.read(recordScreenAutofocusTriggerProvider.notifier).state++;
+          }
+        },
       ),
     );
   }
@@ -244,24 +248,38 @@ class _ElectricianBottomBar extends StatelessWidget {
               child: _item(
                   Icons.assignment_outlined, 'Tasks', color(1), () => onSelect(1)),
             ),
-            GestureDetector(
-              onTap: () => onSelect(2),
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: const BoxDecoration(
-                  color: BVColors.primary,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 14,
-                      offset: Offset(0, 8),
-                    )
-                  ],
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () => onSelect(2),
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: const BoxDecoration(
+                      color: BVColors.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black54,
+                          blurRadius: 14,
+                          offset: Offset(0, 8),
+                        )
+                      ],
+                    ),
+                    child: const Icon(Icons.edit_note_rounded, size: 32, color: Colors.white),
+                  ),
                 ),
-                child: const Icon(Icons.mic_rounded, size: 32, color: Colors.white),
-              ),
+                const SizedBox(height: 2),
+                Text(
+                  'Update',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selectedIndex == 2 ? BVColors.primary : BVColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),

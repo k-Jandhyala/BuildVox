@@ -335,6 +335,47 @@ class QueuedSubmission {
   }
 }
 
+/// Local history for the Field Note / New Update screen (last few submissions).
+enum RecentFieldNoteStatus { processed, pending, failed }
+
+class RecentFieldNote {
+  final String id;
+  final String preview;
+  final String typeLabel;
+  final DateTime createdAt;
+  final RecentFieldNoteStatus status;
+
+  const RecentFieldNote({
+    required this.id,
+    required this.preview,
+    required this.typeLabel,
+    required this.createdAt,
+    required this.status,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'preview': preview,
+        'typeLabel': typeLabel,
+        'createdAt': createdAt.toIso8601String(),
+        'status': status.name,
+      };
+
+  factory RecentFieldNote.fromJson(Map<String, dynamic> json) {
+    return RecentFieldNote(
+      id: json['id'] as String? ?? '',
+      preview: json['preview'] as String? ?? '',
+      typeLabel: json['typeLabel'] as String? ?? '',
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      status: RecentFieldNoteStatus.values.firstWhere(
+        (s) => s.name == json['status'],
+        orElse: () => RecentFieldNoteStatus.processed,
+      ),
+    );
+  }
+}
+
 Color warningSeverityColor(WarningSeverity s) {
   switch (s) {
     case WarningSeverity.critical:

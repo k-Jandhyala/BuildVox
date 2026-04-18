@@ -19,10 +19,9 @@ class PlumberShellScreen extends ConsumerStatefulWidget {
 }
 
 class _PlumberShellScreenState extends ConsumerState<PlumberShellScreen> {
-  int _tab = 0;
-
   @override
   Widget build(BuildContext context) {
+    final tab = ref.watch(tradeWorkerShellTabProvider);
     final jobsites = ref.watch(electricianJobsitesProvider);
     final selectedSiteId = ref.watch(selectedElectricianSiteProvider).valueOrNull;
     final queue = ref.watch(electricianQueueProvider).valueOrNull ?? const [];
@@ -133,7 +132,7 @@ class _PlumberShellScreenState extends ConsumerState<PlumberShellScreen> {
         ),
       ),
       body: IndexedStack(
-        index: _tab,
+        index: tab,
         children: const [
           PlumberHomeScreen(),
           PlumberTasksScreen(),
@@ -143,9 +142,14 @@ class _PlumberShellScreenState extends ConsumerState<PlumberShellScreen> {
         ],
       ),
       bottomNavigationBar: _PlumberBottomBar(
-        selectedIndex: _tab,
+        selectedIndex: tab,
         warningCount: queuedCount,
-        onSelect: (index) => setState(() => _tab = index),
+        onSelect: (index) {
+          ref.read(tradeWorkerShellTabProvider.notifier).state = index;
+          if (index == 2) {
+            ref.read(recordScreenAutofocusTriggerProvider.notifier).state++;
+          }
+        },
       ),
     );
   }
@@ -212,50 +216,67 @@ class _PlumberBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = (int i) => selectedIndex == i ? BVColors.primary : BVColors.textSecondary;
-    return Container(
-      height: 102,
-      decoration: const BoxDecoration(
-        color: BVColors.surface,
-        border: Border(top: BorderSide(color: BVColors.divider)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: _item(Icons.home_outlined, 'Home', color(0), () => onSelect(0)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: _item(Icons.assignment_outlined, 'Tasks', color(1), () => onSelect(1)),
-          ),
-          GestureDetector(
-            onTap: () => onSelect(2),
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(
-                color: BVColors.primary,
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 14, offset: Offset(0, 8))],
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 102,
+        decoration: const BoxDecoration(
+          color: BVColors.surface,
+          border: Border(top: BorderSide(color: BVColors.divider)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: _item(Icons.home_outlined, 'Home', color(0), () => onSelect(0)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: _item(Icons.assignment_outlined, 'Tasks', color(1), () => onSelect(1)),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () => onSelect(2),
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: const BoxDecoration(
+                      color: BVColors.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 14, offset: Offset(0, 8))],
+                    ),
+                    child: const Icon(Icons.edit_note_rounded, size: 32, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Update',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selectedIndex == 2 ? BVColors.primary : BVColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Badge(
+                isLabelVisible: warningCount > 0,
+                label: Text('$warningCount'),
+                backgroundColor: BVColors.blocker,
+                child: _item(Icons.warning_amber_rounded, 'Warnings', color(3), () => onSelect(3)),
               ),
-              child: const Icon(Icons.mic_rounded, size: 32, color: Colors.white),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Badge(
-              isLabelVisible: warningCount > 0,
-              label: Text('$warningCount'),
-              backgroundColor: BVColors.blocker,
-              child: _item(Icons.warning_amber_rounded, 'Warnings', color(3), () => onSelect(3)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: _item(Icons.person_outline_rounded, 'Profile', color(4), () => onSelect(4)),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: _item(Icons.person_outline_rounded, 'Profile', color(4), () => onSelect(4)),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

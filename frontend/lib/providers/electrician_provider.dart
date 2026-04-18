@@ -18,6 +18,13 @@ import '../services/storage_service.dart';
 import 'auth_provider.dart';
 import 'project_provider.dart';
 
+// ── Trade worker shell (Electrician / Plumber) bottom tabs ────────────────────
+
+final tradeWorkerShellTabProvider = StateProvider<int>((ref) => 0);
+
+/// Increment to request focus on the Field Note text field (tab index 2).
+final recordScreenAutofocusTriggerProvider = StateProvider<int>((ref) => 0);
+
 final electricianEnabledProvider = Provider<bool>((ref) {
   final user = ref.watch(currentUserProvider);
   return user?.role == UserRole.worker && user?.trade == TradeType.electrical;
@@ -206,6 +213,51 @@ class QueueNotifier extends AsyncNotifier<List<QueuedSubmission>> {
 final electricianQueueProvider =
     AsyncNotifierProvider<QueueNotifier, List<QueuedSubmission>>(
   QueueNotifier.new,
+);
+
+/// Last few field-note submissions shown on the New Update screen.
+class RecentFieldNotesNotifier extends AsyncNotifier<List<RecentFieldNote>> {
+  static const _fileName = 'recent_field_notes.json';
+  static const _maxEntries = 3;
+
+  @override
+  Future<List<RecentFieldNote>> build() async {
+    return _load();
+  }
+
+  Future<File> _file() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/$_fileName');
+  }
+
+  Future<List<RecentFieldNote>> _load() async {
+    final f = await _file();
+    if (!await f.exists()) return const [];
+    final raw = await f.readAsString();
+    if (raw.trim().isEmpty) return const [];
+    final list = (jsonDecode(raw) as List)
+        .map((e) => RecentFieldNote.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+    return list.take(_maxEntries).toList();
+  }
+
+  Future<void> _save(List<RecentFieldNote> items) async {
+    final f = await _file();
+    await f.writeAsString(jsonEncode(items.map((e) => e.toJson()).toList()));
+  }
+
+  /// Newest first; keeps [_maxEntries] items.
+  Future<void> prepend(RecentFieldNote entry) async {
+    final cur = state.valueOrNull ?? await _load();
+    final next = [entry, ...cur].take(_maxEntries).toList();
+    state = AsyncValue.data(next);
+    await _save(next);
+  }
+}
+
+final recentFieldNotesProvider =
+    AsyncNotifierProvider<RecentFieldNotesNotifier, List<RecentFieldNote>>(
+  RecentFieldNotesNotifier.new,
 );
 
 class RecordFlowController extends AsyncNotifier<List<AiExtractedItem>> {
