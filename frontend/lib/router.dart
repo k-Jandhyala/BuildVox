@@ -40,7 +40,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isSignedIn && isLoginRoute) {
         final userProfile = ref.read(currentUserProvider);
-        return _homeRouteForUser(userProfile);
+        return homeRouteForUser(userProfile);
       }
 
       return null;
@@ -152,7 +152,8 @@ String _homeRouteForRole(UserRole? role) {
   }
 }
 
-String _homeRouteForUser(UserModel? user) {
+/// Resolves the initial home route after login (trade workers → trade shells).
+String homeRouteForUser(UserModel? user) {
   if (user?.role == UserRole.worker && user?.trade == TradeType.electrical) {
     return '/electrician';
   }

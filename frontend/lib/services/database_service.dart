@@ -223,6 +223,21 @@ class DatabaseService {
     });
   }
 
+  static Stream<List<TaskAssignmentModel>> tasksAssignedByStream(String userId) {
+    return _c
+        .from('task_assignments')
+        .stream(primaryKey: ['id'])
+        .eq('assigned_by_user_id', userId)
+        .map((rows) {
+          final list = rows
+              .map((r) =>
+                  TaskAssignmentModel.fromJson(Map<String, dynamic>.from(r)))
+              .toList()
+            ..sort((a, b) => _cmpCreated(a, b, (x) => x.createdAt));
+          return list;
+        });
+  }
+
   // ── Notifications ─────────────────────────────────────────────────────────
 
   static Stream<List<NotificationModel>> notificationsStream(String userId) {

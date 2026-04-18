@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/electrician_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
+import '../../theme.dart';
 
 class ElectricianProfileScreen extends ConsumerWidget {
   const ElectricianProfileScreen({super.key});
@@ -24,20 +25,46 @@ class ElectricianProfileScreen extends ConsumerWidget {
           style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 16),
-        _InfoCard(label: 'Name', value: user?.name ?? '-'),
-        _InfoCard(label: 'Trade', value: user?.trade?.displayName ?? '-'),
-        _InfoCard(label: 'Company', value: user?.companyId ?? '-'),
-        _InfoCard(label: 'Assigned Jobsites', value: '${sites.length}'),
-        _InfoCard(label: 'Queue Pending', value: '$pending'),
+        CircleAvatar(
+          radius: 36,
+          backgroundColor: BVColors.surface,
+          child: Text(
+            (user?.name ?? 'U').split(' ').take(2).map((e) => e[0]).join(),
+            style: const TextStyle(
+              color: BVColors.primary,
+              fontWeight: FontWeight.w800,
+              fontSize: 22,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _InfoCard(label: 'Name', value: user?.name ?? '-', icon: Icons.person_outline_rounded),
+        _InfoCard(label: 'Trade', value: user?.trade?.displayName ?? '-', icon: Icons.handyman_rounded),
+        _InfoCard(label: 'Company', value: user?.companyId ?? '-', icon: Icons.business_outlined),
+        _InfoCard(label: 'Assigned Jobsites', value: '${sites.length}', icon: Icons.location_on_outlined),
+        _InfoCard(
+          label: 'Queue Pending',
+          value: '$pending',
+          icon: Icons.schedule_rounded,
+          onTap: () => context.go('/electrician'),
+        ),
         const SizedBox(height: 16),
-        ElevatedButton.icon(
+        OutlinedButton.icon(
           onPressed: () async {
             await ref.read(authNotifierProvider.notifier).signOut();
             if (!context.mounted) return;
             context.go('/login');
           },
-          icon: const Icon(Icons.logout_rounded),
-          label: const Text('Sign Out'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: BVColors.blocker,
+            side: const BorderSide(color: BVColors.blocker),
+          ),
+          icon: const Icon(Icons.logout_rounded, color: BVColors.blocker),
+          label: const Text('Sign Out', style: TextStyle(color: BVColors.blocker)),
+        ),
+        const SizedBox(height: 18),
+        const Center(
+          child: Text('v1.0.0', style: TextStyle(color: BVColors.textSecondary)),
         ),
       ],
     );
@@ -47,25 +74,38 @@ class ElectricianProfileScreen extends ConsumerWidget {
 class _InfoCard extends StatelessWidget {
   final String label;
   final String value;
-  const _InfoCard({required this.label, required this.value});
+  final IconData icon;
+  final VoidCallback? onTap;
+  const _InfoCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111827),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Text(label, style: const TextStyle(color: Color(0xFF94A3B8))),
-          const Spacer(),
-          Text(value,
-              style:
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-        ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: BVColors.surface,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: BVColors.primary),
+            const SizedBox(width: 10),
+            Text(label, style: const TextStyle(color: BVColors.textSecondary)),
+            const Spacer(),
+            Text(value,
+                style:
+                    const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          ],
+        ),
       ),
     );
   }

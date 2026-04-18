@@ -1,86 +1,94 @@
 import 'dart:io';
-import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../models/electrician_models.dart';
 import '../../models/job_site_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
-import '../../services/audio_recording_service.dart';
-
-enum RecordUiState {
-  idle,
-  recording,
-  processing,
-  aiReview,
-  submitting,
-  success,
-  queuedOffline
-}
+import '../../services/functions_service.dart';
+import '../../services/storage_service.dart';
+import '../../theme.dart';
+import '../worker/trade_field_note_config.dart';
 
 class ElectricianRecordScreen extends ConsumerStatefulWidget {
-  const ElectricianRecordScreen({super.key});
+  final TradeFieldNoteLayout layout;
+  final FieldNoteHost host;
+
+  const ElectricianRecordScreen({
+    super.key,
+    this.layout = TradeFieldNoteLayout.electrician,
+    this.host = FieldNoteHost.tradeWorker,
+  });
 
   @override
   ConsumerState<ElectricianRecordScreen> createState() =>
       _ElectricianRecordScreenState();
 }
 
-class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScreen>
-    with WidgetsBindingObserver {
-  final AudioRecorder _recorder = AudioRecorder();
-  RecordUiState _state = RecordUiState.idle;
-  String? _recordedPath;
+class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScreen> {
+  final TextEditingController _textController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  late FieldNoteTagDefinition _selectedTag;
   List<String> _photos = [];
-  String _status = 'Tap to start recording';
-  DateTime? _recordingStartedAt;
-  StreamSubscription<Amplitude>? _amplitudeSub;
-  DateTime? _lastAmplitudeLogAt;
-  double _maxAmplitudeDb = -160.0;
-  bool _isEmulator = false;
+  bool _submitting = false;
+  bool _offlineBannerDismissed = false;
+
+  static const _inputBg = Color(0xFF1A2733);
+  static const _inputBorder = Color(0xFF2A3A4A);
+  static const _placeholder = Color(0xFFA8B8C8);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initRecordingEnvironment();
+    _selectedTag =
+        widget.layout.tags[widget.layout.defaultTagIndex.clamp(0, widget.layout.tags.length - 1)];
+    _textController.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _amplitudeSub?.cancel();
-    _recorder.dispose();
+    _textController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_state == RecordUiState.recording &&
-        (state == AppLifecycleState.inactive ||
-            state == AppLifecycleState.paused)) {
-      _toggleRecord().ignore();
-    }
+  bool _isLikelyOfflineError(String raw) {
+    final s = raw.toLowerCase();
+    return s.contains('socketexception') ||
+        s.contains('failed host lookup') ||
+        s.contains('network is unreachable') ||
+        s.contains('connection refused') ||
+        s.contains('timed out') ||
+        s.contains('clientexception');
   }
 
-  Future<void> _initRecordingEnvironment() async {
-    final emulator = await AudioRecordingService.isAndroidEmulator();
-    if (!mounted) return;
-    setState(() => _isEmulator = emulator);
+  int _wordCount(String t) {
+    final trimmed = t.trim();
+    if (trimmed.isEmpty) return 0;
+    return trimmed.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
   }
 
-  Future<bool> _ensureMic() async {
-    final status = await Permission.microphone.request();
-    return status.isGranted;
+  String _previewOneLine(String text) {
+    final one = text.trim().replaceAll('\n', ' ');
+    if (one.length <= 60) return one;
+    return '${one.substring(0, 57)}…';
+  }
+
+  String _relativeTime(DateTime t) {
+    final d = DateTime.now().difference(t);
+    if (d.inSeconds < 60) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes} min ago';
+    if (d.inHours < 24) return '${d.inHours} hrs ago';
+    if (d.inDays < 7) return '${d.inDays} days ago';
+    return '${(d.inDays / 7).floor()} wks ago';
   }
 
   Future<bool> _ensurePhotos() async {
@@ -88,86 +96,9 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     return status.isGranted || await Permission.storage.request().isGranted;
   }
 
-  Future<void> _toggleRecord() async {
-    if (_state == RecordUiState.recording) {
-      final path = await _recorder.stop();
-      final stoppedAt = DateTime.now();
-      await _amplitudeSub?.cancel();
-      _amplitudeSub = null;
-      await AudioRecordingService.logStop(
-        flow: 'electrician_record',
-        startedAt: _recordingStartedAt,
-        stoppedAt: stoppedAt,
-        path: path,
-        maxDb: _maxAmplitudeDb,
-      );
-      HapticFeedback.mediumImpact();
-      if (path != null) {
-        final trackedSeconds = _recordingStartedAt == null
-            ? 0
-            : stoppedAt.difference(_recordingStartedAt!).inSeconds;
-        final lowSignal = _maxAmplitudeDb < -45.0;
-        setState(() {
-          _recordedPath = path;
-          _state = RecordUiState.idle;
-          _status = lowSignal
-              ? 'Recording captured but mic signal looked very low. Test on a real device if using emulator.'
-              : trackedSeconds > 0
-                  ? 'Recording captured (${trackedSeconds}s). Process with AI.'
-                  : 'Recording captured. Process with AI.';
-        });
-      }
-      return;
-    }
-    if (!await _ensureMic()) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Microphone permission denied. Enable it in settings.'),
-      ));
-      return;
-    }
-    final dir = await getApplicationDocumentsDirectory();
-    final path = '${dir.path}/electrician_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    final startedAt = DateTime.now();
-    await _recorder.start(AudioRecordingService.stableVoiceConfig, path: path);
-    AudioRecordingService.logStart(
-      flow: 'electrician_record',
-      path: path,
-      startedAt: startedAt,
-      isEmulator: _isEmulator,
-    );
-    _amplitudeSub?.cancel();
-    _maxAmplitudeDb = -160.0;
-    _lastAmplitudeLogAt = null;
-    _amplitudeSub = _recorder
-        .onAmplitudeChanged(AudioRecordingService.amplitudeSampleInterval)
-        .listen((amp) {
-      final currentDb = amp.current;
-      if (currentDb > _maxAmplitudeDb) {
-        _maxAmplitudeDb = currentDb;
-      }
-      final now = DateTime.now();
-      if (_lastAmplitudeLogAt == null ||
-          now.difference(_lastAmplitudeLogAt!).inSeconds >= 2) {
-        _lastAmplitudeLogAt = now;
-        AudioRecordingService.logAmplitude(
-          flow: 'electrician_record',
-          currentDb: currentDb,
-          maxDb: _maxAmplitudeDb,
-        );
-      }
-    });
-    HapticFeedback.heavyImpact();
-    setState(() {
-      _state = RecordUiState.recording;
-      _recordingStartedAt = startedAt;
-      _status = _isEmulator
-          ? '${AudioRecordingService.emulatorHintText()} Tap again to stop.'
-          : 'Recording... tap again to stop';
-    });
-  }
-
   Future<void> _attachPhoto() async {
     if (!await _ensurePhotos()) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Photo permission denied. Enable it in settings.'),
       ));
@@ -179,14 +110,48 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     setState(() {
       _photos = [
         ..._photos,
-        ...result.files
-            .where((f) => f.path != null)
-            .map((f) => f.path!)
+        ...result.files.where((f) => f.path != null).map((f) => f.path!)
       ];
     });
   }
 
-  Future<void> _process() async {
+  Future<void> _confirmClear() async {
+    final text = _textController.text;
+    if (text.trim().isEmpty) return;
+    if (text.length <= 20) {
+      _textController.clear();
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BVColors.surface,
+        title: const Text('Clear note?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Discard everything in this field?',
+          style: TextStyle(color: BVColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      _textController.clear();
+    }
+  }
+
+  Future<void> _submit() async {
+    final raw = _textController.text.trim();
+    if (raw.isEmpty || _submitting) return;
+
     final siteId = ref.read(selectedElectricianSiteProvider).valueOrNull;
     final sites = ref.read(electricianJobsitesProvider).valueOrNull ?? const [];
     JobSiteModel? site;
@@ -196,221 +161,548 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
         break;
       }
     }
-    if (_recordedPath == null || site == null) {
+    if (site == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Record a memo and select a valid jobsite first.'),
+        content: Text('Select a valid jobsite before submitting.'),
       ));
       return;
     }
-    final draft = VoiceMemoDraft(
-      localAudioPath: _recordedPath!,
-      siteId: site.id,
-      projectId: site.projectId,
-      attachedPhotoPaths: _photos,
-      createdAt: DateTime.now(),
-    );
-    setState(() {
-      _state = RecordUiState.processing;
-      _status = 'Processing voice memo with AI...';
-    });
+
+    final user = ref.read(currentUserProvider);
+    final trade = user?.trade?.name ??
+        (user?.role == UserRole.gc ? 'general_contractor' : 'electrical');
+
+    setState(() => _submitting = true);
+    HapticFeedback.lightImpact();
+
+    final photoUrls = <String>[];
     try {
-      await ref.read(recordFlowProvider.notifier).startProcessing(
-            draft: draft,
-            queueIfOffline: true,
-          );
+      for (final p in _photos) {
+        final up = await StorageService.uploadPhoto(File(p));
+        photoUrls.add(up.publicUrl);
+      }
+
+      final item = AiExtractedItem(
+        id: const Uuid().v4(),
+        transcriptSegment: raw,
+        summary: _previewOneLine(raw),
+        category: _selectedTag.category,
+        priority: ElectricianPriority.medium,
+        location: '',
+        relatedTrade: trade,
+        notes: '',
+        isBlocker: _selectedTag.isBlocker,
+        isMaterialRequest: _selectedTag.isMaterialRequest,
+        attachedPhotos: photoUrls,
+        expanded: false,
+      );
+
+      final requestId = 'field_note_${DateTime.now().millisecondsSinceEpoch}';
+
+      await FunctionsService.submitReviewedItems(
+        requestId: requestId,
+        projectId: site.projectId,
+        siteId: site.id,
+        items: [item.toJson()],
+      );
+
       if (!mounted) return;
+      await ref.read(recentFieldNotesProvider.notifier).prepend(
+            RecentFieldNote(
+              id: requestId,
+              preview: _previewOneLine(raw),
+              typeLabel: _selectedTag.shortTypeLabel,
+              createdAt: DateTime.now(),
+              status: RecentFieldNoteStatus.processed,
+            ),
+          );
+      _textController.clear();
       setState(() {
-        _state = RecordUiState.aiReview;
-        _status = 'AI extracted items. Review before submission.';
+        _photos = [];
+        _selectedTag = widget
+            .layout.tags[widget.layout.defaultTagIndex.clamp(0, widget.layout.tags.length - 1)];
+        _submitting = false;
       });
-      HapticFeedback.selectionClick();
-      final user = ref.read(currentUserProvider);
-      final route = user?.trade == TradeType.plumbing
-          ? '/plumber/ai-review'
-          : '/electrician/ai-review';
-      context.push(route);
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Update submitted')),
+      );
     } catch (e) {
-      final msg = e.toString();
-      final queued = msg.contains('queued_offline:');
-      final isStorageRls = _isStorageRlsError(msg);
-      setState(() {
-        _state = queued ? RecordUiState.queuedOffline : RecordUiState.idle;
-        _status = queued
-            ? 'No connection. Memo queued and will auto-sync.'
-            : isStorageRls
-                ? 'Upload blocked by storage permissions. See error details.'
-                : 'Processing failed. See error details.';
-      });
+      final err = e.toString();
+      final queued = _isLikelyOfflineError(err);
       if (queued) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Queued offline: ${msg.replaceFirst('Exception: queued_offline:', '')}')),
+        final requestId = 'field_note_q_${DateTime.now().millisecondsSinceEpoch}';
+        final item = AiExtractedItem(
+          id: const Uuid().v4(),
+          transcriptSegment: raw,
+          summary: _previewOneLine(raw),
+          category: _selectedTag.category,
+          priority: ElectricianPriority.medium,
+          location: '',
+          relatedTrade: trade,
+          notes: '',
+          isBlocker: _selectedTag.isBlocker,
+          isMaterialRequest: _selectedTag.isMaterialRequest,
+          attachedPhotos: photoUrls,
+          expanded: false,
         );
+        try {
+          await ref.read(electricianQueueProvider.notifier).enqueue(
+                QueuedSubmission(
+                  id: const Uuid().v4(),
+                  type: QueueSubmissionType.finalSubmission,
+                  status: QueueStatus.queued,
+                  createdAt: DateTime.now(),
+                  attempts: 0,
+                  payload: {
+                    'requestId': requestId,
+                    'projectId': site.projectId,
+                    'siteId': site.id,
+                    'items': [item.toJson()],
+                  },
+                  error: err,
+                ),
+              );
+          if (!mounted) return;
+          await ref.read(recentFieldNotesProvider.notifier).prepend(
+                RecentFieldNote(
+                  id: requestId,
+                  preview: _previewOneLine(raw),
+                  typeLabel: _selectedTag.shortTypeLabel,
+                  createdAt: DateTime.now(),
+                  status: RecentFieldNoteStatus.pending,
+                ),
+              );
+          _textController.clear();
+          setState(() {
+            _photos = [];
+            _selectedTag = widget
+            .layout.tags[widget.layout.defaultTagIndex.clamp(0, widget.layout.tags.length - 1)];
+            _submitting = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'No connection. Queued for sync: ${err.length > 80 ? "${err.substring(0, 80)}…" : err}',
+              ),
+            ),
+          );
+        } catch (_) {
+          if (!mounted) return;
+          setState(() => _submitting = false);
+          await ref.read(recentFieldNotesProvider.notifier).prepend(
+                RecentFieldNote(
+                  id: const Uuid().v4(),
+                  preview: _previewOneLine(raw),
+                  typeLabel: _selectedTag.shortTypeLabel,
+                  createdAt: DateTime.now(),
+                  status: RecentFieldNoteStatus.failed,
+                ),
+              );
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Submit failed: $err')),
+          );
+        }
       } else {
-        final errorText = isStorageRls
-            ? 'Processing failed: Upload blocked by Supabase Storage RLS (403 Unauthorized).\n'
-                'Please add/update a Storage policy that allows authenticated users to upload under '
-                'audio/{uid}/ and photos/{uid}/ in the voice-memos bucket.'
-            : 'Processing failed: $msg';
+        if (!mounted) return;
+        setState(() => _submitting = false);
+        await ref.read(recentFieldNotesProvider.notifier).prepend(
+              RecentFieldNote(
+                id: const Uuid().v4(),
+                preview: _previewOneLine(raw),
+                typeLabel: _selectedTag.shortTypeLabel,
+                createdAt: DateTime.now(),
+                status: RecentFieldNoteStatus.failed,
+              ),
+            );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorText),
-          ),
+          SnackBar(content: Text('Submit failed: $err')),
         );
       }
     }
   }
 
-  bool _isStorageRlsError(String msg) {
-    final lower = msg.toLowerCase();
-    return lower.contains('storageexception') &&
-        lower.contains('row-level security policy');
+  @override
+  Widget build(BuildContext context) {
+    // Focus when this tab becomes visible (IndexedStack keeps all children built).
+    ref.listen<int>(tradeWorkerShellTabProvider, (prev, next) {
+      if (widget.host != FieldNoteHost.tradeWorker) return;
+      if (next == 2) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _focusNode.requestFocus();
+        });
+      } else {
+        _focusNode.unfocus();
+      }
+    });
+
+    ref.listen<int>(gcShellTabProvider, (prev, next) {
+      if (widget.host != FieldNoteHost.gcShell) return;
+      if (next == 2) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _focusNode.requestFocus();
+        });
+      } else {
+        _focusNode.unfocus();
+      }
+    });
+
+    // Re-tap quick action / center button while already on this tab.
+    ref.listen<int>(recordScreenAutofocusTriggerProvider, (prev, next) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final onFieldNoteTab = widget.host == FieldNoteHost.tradeWorker
+            ? ref.read(tradeWorkerShellTabProvider) == 2
+            : ref.read(gcShellTabProvider) == 2;
+        if (onFieldNoteTab) _focusNode.requestFocus();
+      });
+    });
+
+    final summary = ref.watch(selectedSiteSummaryProvider);
+    final queue = ref.watch(electricianQueueProvider).valueOrNull ?? const [];
+    final queuedCount = queue.where((e) => e.status != QueueStatus.completed).length;
+    final recentAsync = ref.watch(recentFieldNotesProvider);
+    final recent = recentAsync.valueOrNull ?? const <RecentFieldNote>[];
+
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final screenH = MediaQuery.sizeOf(context).height;
+    final textAreaHeight = math.max(200.0, math.min(screenH * 0.4, 520.0));
+
+    final text = _textController.text;
+    final words = _wordCount(text);
+    final canSubmit = text.trim().isNotEmpty && !_submitting;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        children: [
+          Text(
+            widget.layout.title,
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            summary == null ? 'No jobsite selected' : 'Current jobsite: ${summary.site.name}',
+            style: const TextStyle(color: Color(0xFF94A3B8)),
+          ),
+          if (queuedCount > 0 && !_offlineBannerDismissed) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: BVColors.primary.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: BVColors.primary.withValues(alpha: 0.45)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('☁', style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$queuedCount pending submission${queuedCount == 1 ? '' : 's'} — will sync when online',
+                      style: const TextStyle(color: BVColors.onSurface, fontSize: 14),
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    icon: const Icon(Icons.close_rounded, color: BVColors.textSecondary, size: 22),
+                    onPressed: () => setState(() => _offlineBannerDismissed = true),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: widget.layout.tags.map((tag) {
+                final selected = _selectedTag == tag;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(tag.chipLabel),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _selectedTag = tag),
+                    selectedColor: BVColors.primary,
+                    labelStyle: TextStyle(
+                      color: selected ? BVColors.onPrimary : BVColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    backgroundColor: Colors.transparent,
+                    side: BorderSide(
+                      color: selected ? BVColors.primary : BVColors.textSecondary.withValues(alpha: 0.5),
+                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SizedBox(
+                height: textAreaHeight,
+                child: TextField(
+                  controller: _textController,
+                  focusNode: _focusNode,
+                  maxLines: null,
+                  minLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  textCapitalization: TextCapitalization.sentences,
+                  autocorrect: true,
+                  enableSuggestions: true,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.35),
+                  cursorColor: BVColors.primary,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: _inputBg,
+                    hintText: widget.layout.placeholder,
+                    hintStyle: const TextStyle(color: _placeholder, fontSize: 16, height: 1.35),
+                    contentPadding: const EdgeInsets.all(14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: _inputBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: _inputBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: BVColors.primary, width: 2),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 10,
+                bottom: 8,
+                child: Text(
+                  '${text.length} chars · $words words',
+                  style: TextStyle(
+                    color: BVColors.textSecondary.withValues(alpha: 0.9),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Badge(
+            isLabelVisible: _photos.isNotEmpty,
+            label: Text(
+              '${_photos.length}',
+              style: const TextStyle(
+                color: BVColors.onPrimary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            backgroundColor: BVColors.primary,
+            child: OutlinedButton.icon(
+              onPressed: _attachPhoto,
+              icon: const Icon(Icons.photo_camera_outlined, size: 20),
+              label: const Text('Attach photos'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: BVColors.primary,
+                side: const BorderSide(color: BVColors.primary),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          if (_photos.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _photos
+                  .map((p) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          File(p).uri.pathSegments.last,
+                          style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ],
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _confirmClear,
+              child: const Text(
+                'Clear',
+                style: TextStyle(color: BVColors.textSecondary, fontSize: 13),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: canSubmit ? _submit : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: BVColors.primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: BVColors.divider,
+                disabledForegroundColor: BVColors.textSecondary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _submitting
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Processing...',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                        ),
+                      ],
+                    )
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '✦ Submit Update',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(Icons.send_rounded, size: 22),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Recent submissions',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          if (recent.isEmpty)
+            const Text(
+              'No submissions yet',
+              style: TextStyle(color: BVColors.textSecondary),
+            )
+          else
+            ...recent.map((n) => _RecentNoteCard(note: n, relativeTime: _relativeTime)),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentNoteCard extends StatelessWidget {
+  final RecentFieldNote note;
+  final String Function(DateTime) relativeTime;
+
+  const _RecentNoteCard({required this.note, required this.relativeTime});
+
+  Color _statusColor(RecentFieldNoteStatus s) {
+    switch (s) {
+      case RecentFieldNoteStatus.processed:
+        return BVColors.done;
+      case RecentFieldNoteStatus.pending:
+        return BVColors.primary;
+      case RecentFieldNoteStatus.failed:
+        return BVColors.blocker;
+    }
   }
 
-  String? _buildAiSummary(List<AiExtractedItem> items) {
-    final summaries = items
-        .map((e) => e.summary.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-    if (summaries.isEmpty) return null;
-
-    if (summaries.length == 1) {
-      return summaries.first;
+  String _statusLabel(RecentFieldNoteStatus s) {
+    switch (s) {
+      case RecentFieldNoteStatus.processed:
+        return 'Processed';
+      case RecentFieldNoteStatus.pending:
+        return 'Pending';
+      case RecentFieldNoteStatus.failed:
+        return 'Failed';
     }
-
-    final preview = summaries.take(3).join(' ');
-    if (summaries.length <= 3) return preview;
-    return '$preview (+${summaries.length - 3} more item(s))';
   }
 
   @override
   Widget build(BuildContext context) {
-    final summary = ref.watch(selectedSiteSummaryProvider);
-    final queue = ref.watch(electricianQueueProvider).valueOrNull ?? const [];
-    final extractedItems = ref.watch(recordFlowProvider).valueOrNull ?? const [];
-    final aiSummary = _buildAiSummary(extractedItems);
-    final queuedCount = queue.where((e) => e.status != QueueStatus.completed).length;
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Text(
-          'Record',
-          style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          summary == null
-              ? 'No jobsite selected'
-              : 'Current jobsite: ${summary.site.name}',
-          style: const TextStyle(color: Color(0xFF94A3B8)),
-        ),
-        if (queuedCount > 0) ...[
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              'Offline queue: $queuedCount pending submission(s)',
-              style: const TextStyle(color: Color(0xFFBFDBFE)),
-            ),
-          )
-        ],
-        const SizedBox(height: 24),
-        Center(
-          child: InkWell(
-            onTap: _toggleRecord,
-            borderRadius: BorderRadius.circular(90),
-            child: Container(
-              width: 180,
-              height: 180,
-              decoration: BoxDecoration(
-                color: _state == RecordUiState.recording
-                    ? const Color(0xFFDC2626)
-                    : const Color(0xFF2563EB),
-                shape: BoxShape.circle,
-                boxShadow: const [
-                  BoxShadow(color: Colors.black45, blurRadius: 20, spreadRadius: 2),
-                ],
-              ),
-              child: Icon(
-                _state == RecordUiState.recording ? Icons.stop_rounded : Icons.mic_rounded,
-                color: Colors.white,
-                size: 72,
-              ),
-            ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: BVColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: BVColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            note.preview,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
           ),
-        ),
-        const SizedBox(height: 16),
-        Text(_status, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: _attachPhoto,
-          icon: const Icon(Icons.add_a_photo_outlined),
-          label: Text('Attach photos (${_photos.length})'),
-        ),
-        if (_photos.isNotEmpty)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _photos
-                .map((p) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        File(p).uri.pathSegments.last,
-                        style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
-                      ),
-                    ))
-                .toList(),
-          ),
-        const SizedBox(height: 18),
-        ElevatedButton.icon(
-          onPressed: _state == RecordUiState.processing ? null : _process,
-          icon: const Icon(Icons.auto_awesome_rounded),
-          label: const Text('Process with AI and Review'),
-        ),
-        if (aiSummary != null) ...[
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF111827),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF1D4ED8)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'AI Summary',
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: BVColors.background,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: BVColors.divider),
+                ),
+                child: Text(
+                  note.typeLabel,
+                  style: const TextStyle(color: BVColors.textSecondary, fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                relativeTime(note.createdAt),
+                style: const TextStyle(color: BVColors.textSecondary, fontSize: 12),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _statusColor(note.status).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  _statusLabel(note.status),
                   style: TextStyle(
-                    color: Color(0xFF93C5FD),
+                    color: _statusColor(note.status),
                     fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  aiSummary,
-                  style: const TextStyle(
-                    color: Color(0xFFE2E8F0),
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
-      ],
+      ),
     );
   }
 }

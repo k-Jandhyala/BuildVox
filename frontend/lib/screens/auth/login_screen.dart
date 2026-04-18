@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../router.dart' show homeRouteForUser;
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme.dart';
@@ -23,11 +26,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // Quick-fill buttons for demo accounts
   static const _demoAccounts = [
-    ('GC', 'gc@demo.com'),
-    ('Electrician', 'electrician@demo.com'),
-    ('Plumber', 'plumber@demo.com'),
-    ('Manager', 'manager@demo.com'),
-    ('Admin', 'admin@demo.com'),
+    ('⚡ Electrician', 'electrician@demo.com', Icons.bolt_rounded),
+    ('🔧 Plumber', 'plumber@demo.com', Icons.handyman_rounded),
+    ('🏗️ GC', 'gc@demo.com', Icons.construction_rounded),
+    ('📊 Manager', 'manager@demo.com', Icons.assignment_rounded),
+    ('🛡️ Admin', 'admin@demo.com', Icons.shield_rounded),
   ];
 
   @override
@@ -52,23 +55,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
 
       setState(() => _loading = false);
-      _navigateForRole(user.role);
+      if (!mounted) return;
+      context.go(homeRouteForUser(user));
     } catch (e) {
       setState(() {
         _errorMessage = _friendlyError(e);
         _loading = false;
       });
     }
-  }
-
-  void _navigateForRole(UserRole role) {
-    final path = switch (role) {
-      UserRole.worker => '/worker',
-      UserRole.gc => '/gc',
-      UserRole.manager => '/manager',
-      UserRole.admin => '/admin',
-    };
-    context.go(path);
   }
 
   String _friendlyError(Object e) {
@@ -109,32 +103,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor: BVColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(height: 3, color: BVColors.primary),
               const SizedBox(height: 56),
 
               // ── Logo / Brand ───────────────────────────────────────────────
+              const _BlueprintBackdrop(),
               Row(
                 children: [
                   Container(
-                    width: 44,
-                    height: 44,
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
                       color: BVColors.primary,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.construction,
-                        color: Colors.white, size: 24),
+                    child: const Icon(Icons.handyman, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 12),
                   const Text(
                     'BuildVox',
                     style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      color: BVColors.onSurface,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
                       letterSpacing: -0.5,
                     ),
                   ),
@@ -142,15 +137,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 10),
               const Text(
-                'Construction site communication,\nsimplified.',
+                'Construction site communication, simplified.',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   color: BVColors.textSecondary,
                   height: 1.5,
                 ),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 44),
 
               // ── Sign-in form ───────────────────────────────────────────────
               Form(
@@ -161,9 +156,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const Text(
                       'Sign in',
                       style: TextStyle(
-                        fontSize: 20,
+                      fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        color: BVColors.onSurface,
+                      color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -175,7 +170,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       autocorrect: false,
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
-                        labelText: 'Email',
+                        hintText: 'Email',
                         prefixIcon: Icon(Icons.email_outlined, size: 20),
                       ),
                       validator: (v) {
@@ -195,7 +190,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) => _signIn(),
                       decoration: InputDecoration(
-                        labelText: 'Password',
+                        hintText: 'Password',
                         prefixIcon:
                             const Icon(Icons.lock_outline, size: 20),
                         suffixIcon: IconButton(
@@ -260,7 +255,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: CircularProgressIndicator(
                                   color: Colors.white, strokeWidth: 2.5),
                             )
-                          : const Text('Sign In'),
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text('Sign In'),
+                                SizedBox(width: 8),
+                                Icon(Icons.arrow_forward_rounded, size: 20),
+                              ],
+                            ),
                     ),
                   ],
                 ),
@@ -269,49 +271,137 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 36),
 
               // ── Demo account quick-fill ────────────────────────────────────
-              const Text(
-                'DEMO ACCOUNTS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: BVColors.textSecondary,
-                  letterSpacing: 1.0,
-                ),
-              ),
+              const _CenterDividerLabel(label: 'DEMO ACCOUNTS'),
               const SizedBox(height: 8),
-              const Text(
-                'Password for all: BuildVox2024!',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: BVColors.textSecondary,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: BVColors.primary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: BVColors.primary.withValues(alpha: 0.5)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: BVColors.primary),
+                    SizedBox(width: 8),
+                    Text(
+                      'Password for all: BuildVox2024!',
+                      style: TextStyle(color: BVColors.onSurface),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _demoAccounts.map((account) {
-                  return OutlinedButton(
-                    onPressed: _loading
-                        ? null
-                        : () {
-                            _emailCtrl.text = account.$2;
-                            _passwordCtrl.text = 'BuildVox2024!';
-                          },
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 36),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 0),
-                    ),
-                    child: Text(account.$1, style: const TextStyle(fontSize: 12)),
-                  );
-                }).toList(),
+              // Two-line layout so Manager/Admin are always visible (no cut-off).
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: _demoAccounts.map((account) {
+                    final selected = _emailCtrl.text == account.$2;
+                    return FilterChip(
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                      avatar: Icon(
+                        account.$3,
+                        size: 18,
+                        color: selected ? BVColors.background : BVColors.primary,
+                      ),
+                      selected: selected,
+                      showCheckmark: false,
+                      selectedColor: BVColors.primary,
+                      backgroundColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        side: const BorderSide(color: BVColors.primary),
+                      ),
+                      label: Text(
+                        account.$1,
+                        style: TextStyle(
+                          color:
+                              selected ? BVColors.background : BVColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onSelected: _loading
+                          ? null
+                          : (_) {
+                              setState(() {
+                                _emailCtrl.text = account.$2;
+                                _passwordCtrl.text = 'BuildVox2024!';
+                              });
+                            },
+                    );
+                  }).toList(),
+                ),
               ),
               const SizedBox(height: 40),
+              const Center(
+                child: Text(
+                  'v1.0.0',
+                  style: TextStyle(color: BVColors.textSecondary),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+class _CenterDividerLabel extends StatelessWidget {
+  final String label;
+  const _CenterDividerLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: BVColors.divider)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: BVColors.textSecondary,
+              letterSpacing: 1.2,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider(color: BVColors.divider)),
+      ],
+    );
+  }
+}
+
+class _BlueprintBackdrop extends StatelessWidget {
+  const _BlueprintBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(
+        size: const Size(double.infinity, 0),
+        painter: _BlueprintPainter(),
+      ),
+    );
+  }
+}
+
+class _BlueprintPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = BVColors.textSecondary.withValues(alpha: 0.06)
+      ..strokeWidth = 1;
+    for (double x = -200; x < 1000; x += 20) {
+      canvas.drawLine(Offset(x, 0), Offset(x + 300, 300), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
