@@ -3,7 +3,6 @@ import '../models/extracted_item_model.dart';
 
 class UrgencyChip extends StatelessWidget {
   final UrgencyLevel urgency;
-
   const UrgencyChip({super.key, required this.urgency});
 
   @override
@@ -11,8 +10,8 @@ class UrgencyChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: urgency.color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
+        color: urgency.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         urgency.label.toUpperCase(),
@@ -20,7 +19,7 @@ class UrgencyChip extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: urgency.color,
-          letterSpacing: 0.8,
+          letterSpacing: 0.6,
         ),
       ),
     );

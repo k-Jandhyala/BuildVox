@@ -19,27 +19,21 @@ class IncomingRequestsScreen extends ConsumerWidget {
     final itemsAsync = ref.watch(managerItemsProvider);
 
     return itemsAsync.when(
-      loading: () =>
-          const InlineLoader(message: 'Loading incoming requests…'),
+      loading: () => const InlineLoader(message: 'Loading incoming requests…'),
       error: (e, _) => Center(
-        child: Text('Error: $e',
-            style: const TextStyle(color: BVColors.blocker)),
+        child: Text('Error: $e', style: const TextStyle(color: BVColors.danger)),
       ),
       data: (items) {
         if (items.isEmpty) {
           return const EmptyState(
             icon: Icons.inbox_outlined,
             title: 'No incoming requests',
-            subtitle:
-                'Work items routed to your company\nwill appear here.',
+            subtitle: 'Work items routed to your company\nwill appear here.',
           );
         }
 
-        // Separate unassigned (pending) from others
-        final unassigned =
-            items.where((i) => i.status == ItemStatus.pending).toList();
-        final inProgress =
-            items.where((i) => i.status != ItemStatus.pending).toList();
+        final unassigned = items.where((i) => i.status == ItemStatus.pending).toList();
+        final inProgress = items.where((i) => i.status != ItemStatus.pending).toList();
 
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(managerItemsProvider),
@@ -48,8 +42,9 @@ class IncomingRequestsScreen extends ConsumerWidget {
             children: [
               if (unassigned.isNotEmpty) ...[
                 _SectionHeader(
-                    label: 'Needs Assignment (${unassigned.length})',
-                    color: BVColors.blocker),
+                  label: 'Needs Assignment (${unassigned.length})',
+                  color: BVColors.danger,
+                ),
                 ...unassigned.map((item) => ExtractedItemCard(
                       item: item,
                       trailing: _AssignButton(item: item),
@@ -57,8 +52,9 @@ class IncomingRequestsScreen extends ConsumerWidget {
               ],
               if (inProgress.isNotEmpty) ...[
                 _SectionHeader(
-                    label: 'In Progress (${inProgress.length})',
-                    color: BVColors.textSecondary),
+                  label: 'In Progress (${inProgress.length})',
+                  color: BVColors.textSecondary,
+                ),
                 ...inProgress.map((item) => ExtractedItemCard(item: item)),
               ],
             ],
@@ -72,20 +68,17 @@ class IncomingRequestsScreen extends ConsumerWidget {
 class _SectionHeader extends StatelessWidget {
   final String label;
   final Color color;
-
   const _SectionHeader({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
       child: Text(
         label.toUpperCase(),
         style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: color,
-          letterSpacing: 0.8,
+          fontSize: 11, fontWeight: FontWeight.w700,
+          color: color, letterSpacing: 0.8,
         ),
       ),
     );
@@ -107,39 +100,33 @@ class _AssignButtonState extends ConsumerState<_AssignButton> {
     final user = ref.read(currentUserProvider);
     if (user?.companyId == null) return;
 
-    // Load workers for this company
     List<UserModel> workers = [];
     try {
-      workers =
-          await DatabaseService.getWorkersForCompany(user!.companyId!);
+      workers = await DatabaseService.getWorkersForCompany(user!.companyId!);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Failed to load workers: $e'),
-              backgroundColor: BVColors.blocker),
+          SnackBar(content: Text('Failed to load workers: $e'), backgroundColor: BVColors.danger),
         );
       }
       return;
     }
 
     if (!mounted) return;
-
     if (workers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('No workers found in your company.'),
-            backgroundColor: BVColors.textSecondary),
+          content: Text('No workers found in your company.'),
+          backgroundColor: BVColors.textSecondary,
+        ),
       );
       return;
     }
 
-    // Show worker picker dialog
     final selectedWorker = await showDialog<UserModel>(
       context: context,
       builder: (ctx) => _WorkerPickerDialog(workers: workers),
     );
-
     if (selectedWorker == null || !mounted) return;
 
     setState(() => _assigning = true);
@@ -151,18 +138,15 @@ class _AssignButtonState extends ConsumerState<_AssignButton> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-                'Task assigned to ${selectedWorker.name}'),
-            backgroundColor: BVColors.done,
+            content: Text('Task assigned to ${selectedWorker.name}'),
+            backgroundColor: BVColors.success,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Assignment failed: $e'),
-              backgroundColor: BVColors.blocker),
+          SnackBar(content: Text('Assignment failed: $e'), backgroundColor: BVColors.danger),
         );
       }
     } finally {
@@ -172,28 +156,28 @@ class _AssignButtonState extends ConsumerState<_AssignButton> {
 
   @override
   Widget build(BuildContext context) {
-    return _assigning
-        ? const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-                strokeWidth: 2, color: BVColors.primary),
-          )
-        : TextButton(
-            onPressed: _showAssignDialog,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text(
-              'Assign',
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: BVColors.primary),
-            ),
-          );
+    if (_assigning) {
+      return const SizedBox(
+        width: 18, height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2, color: BVColors.primary),
+      );
+    }
+    return GestureDetector(
+      onTap: _showAssignDialog,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: BVColors.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: const Text(
+          'Assign',
+          style: TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w600, color: BVColors.primary,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -204,31 +188,39 @@ class _WorkerPickerDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Assign to Worker'),
+      backgroundColor: BVColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text(
+        'Assign to Worker',
+        style: TextStyle(color: BVColors.onSurface, fontWeight: FontWeight.w700),
+      ),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView.separated(
           shrinkWrap: true,
           itemCount: workers.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
+          separatorBuilder: (_, __) => const Divider(height: 1, color: BVColors.divider),
           itemBuilder: (ctx, i) {
             final w = workers[i];
             return ListTile(
               leading: CircleAvatar(
-                backgroundColor: BVColors.primary.withOpacity(0.15),
-                child: Text(w.initials,
-                    style: const TextStyle(
-                        color: BVColors.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13)),
-              ),
-              title: Text(w.name,
+                backgroundColor: BVColors.primary.withValues(alpha: 0.15),
+                child: Text(
+                  w.initials,
                   style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w500)),
+                    color: BVColors.primary, fontWeight: FontWeight.w700, fontSize: 13,
+                  ),
+                ),
+              ),
+              title: Text(
+                w.name,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: BVColors.onSurface),
+              ),
               subtitle: w.trade != null
-                  ? Text(w.trade!.displayName,
-                      style: const TextStyle(
-                          fontSize: 12, color: BVColors.textSecondary))
+                  ? Text(
+                      w.trade!.displayName,
+                      style: const TextStyle(fontSize: 12, color: BVColors.textSecondary),
+                    )
                   : null,
               onTap: () => Navigator.of(ctx).pop(w),
             );
@@ -238,7 +230,7 @@ class _WorkerPickerDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: const Text('Cancel', style: TextStyle(color: BVColors.textSecondary)),
         ),
       ],
     );

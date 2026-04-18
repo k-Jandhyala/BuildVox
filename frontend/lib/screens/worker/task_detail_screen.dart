@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../models/extracted_item_model.dart';
-import '../../models/task_assignment_model.dart';
 import '../../services/database_service.dart';
 import '../../services/functions_service.dart';
 import '../../theme.dart';
@@ -26,7 +25,6 @@ class TaskDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
-  TaskAssignmentModel? _task;
   ExtractedItemModel? _item;
   bool _loading = true;
   bool _updating = false;
@@ -45,7 +43,7 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
       ]);
       // Also watch task via stream for live status updates
       setState(() {
-        _item = results[0] as ExtractedItemModel?;
+        _item = results[0];
         _loading = false;
       });
     } catch (e) {
@@ -184,10 +182,8 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: BVColors.primaryLight.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: BVColors.primaryLight.withOpacity(0.3)),
+                  color: BVColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,7 +361,7 @@ class _StatusButton extends StatelessWidget {
         icon: Icon(icon, size: 18, color: color),
         label: Text(label, style: TextStyle(color: color, fontSize: 14)),
         style: OutlinedButton.styleFrom(
-          side: BorderSide(color: color.withOpacity(0.5)),
+          side: BorderSide(color: color.withValues(alpha: 0.5)),
           padding: const EdgeInsets.symmetric(vertical: 12),
           alignment: Alignment.centerLeft,
           minimumSize: const Size(double.infinity, 48),

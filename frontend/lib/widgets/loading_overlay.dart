@@ -11,18 +11,15 @@ class LoadingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black.withOpacity(0.45),
+      color: const Color(0x73000000),
       child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: BVColors.surface,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.12),
-                blurRadius: 24,
-              ),
+            boxShadow: const [
+              BoxShadow(color: Color(0x1F000000), blurRadius: 24),
             ],
           ),
           child: Column(

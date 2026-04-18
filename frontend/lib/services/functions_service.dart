@@ -9,7 +9,7 @@ import 'supabase_service.dart';
 class FunctionsService {
   static const String _projectId = String.fromEnvironment(
     'FIREBASE_PROJECT_ID',
-    defaultValue: 'buildvox',
+    defaultValue: 'buildvox-74a8b',
   );
   static const String _region = String.fromEnvironment(
     'FIREBASE_FUNCTIONS_REGION',

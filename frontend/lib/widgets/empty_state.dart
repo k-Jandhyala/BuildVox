@@ -28,11 +28,11 @@ class EmptyState extends StatelessWidget {
             Container(
               width: 80,
               height: 80,
-              decoration: BoxDecoration(
-                color: BVColors.primary.withOpacity(0.08),
+              decoration: const BoxDecoration(
+                color: BVColors.surfaceOverlay,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 36, color: BVColors.primary.withOpacity(0.6)),
+              child: Icon(icon, size: 36, color: BVColors.textMuted),
             ),
             const SizedBox(height: 20),
             Text(
@@ -61,7 +61,7 @@ class EmptyState extends StatelessWidget {
               ElevatedButton(
                 onPressed: onAction,
                 style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(160, 44),
+                  minimumSize: const Size(160, 48),
                 ),
                 child: Text(actionLabel!),
               ),

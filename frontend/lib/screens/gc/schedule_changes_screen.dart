@@ -16,8 +16,7 @@ class ScheduleChangesScreen extends ConsumerWidget {
     return changesAsync.when(
       loading: () => const InlineLoader(message: 'Loading schedule changes…'),
       error: (e, _) => Center(
-        child: Text('Error: $e',
-            style: const TextStyle(color: BVColors.blocker)),
+        child: Text('Error: $e', style: const TextStyle(color: BVColors.danger)),
       ),
       data: (items) {
         if (items.isEmpty) {
@@ -37,9 +36,7 @@ class ScheduleChangesScreen extends ConsumerWidget {
               ...items.map((item) => ExtractedItemCard(
                     item: item,
                     trailing: item.downstreamTrades.isNotEmpty
-                        ? _DownstreamTag(
-                            trades: item.downstreamTrades,
-                          )
+                        ? _DownstreamTag(trades: item.downstreamTrades)
                         : null,
                   )),
             ],
@@ -57,25 +54,20 @@ class _InfoBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: BVColors.scheduleChange.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: BVColors.scheduleChange.withOpacity(0.3)),
+        color: BVColors.infoBg,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
-          const Icon(Icons.schedule_rounded,
-              color: BVColors.scheduleChange, size: 18),
+          const Icon(Icons.schedule_rounded, color: BVColors.info, size: 18),
           const SizedBox(width: 8),
           Text(
             '$count schedule change${count != 1 ? 's' : ''} — downstream notified',
             style: const TextStyle(
-              fontSize: 13,
-              color: BVColors.scheduleChange,
-              fontWeight: FontWeight.w600,
+              fontSize: 13, color: BVColors.info, fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -91,17 +83,15 @@ class _DownstreamTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: BVColors.scheduleChange.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
+        color: BVColors.infoBg,
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        '↓ ${trades.take(2).join(', ')}${trades.length > 2 ? '+${trades.length - 2}' : ''}',
+        '↓ ${trades.take(2).join(', ')}${trades.length > 2 ? ' +${trades.length - 2}' : ''}',
         style: const TextStyle(
-          fontSize: 10,
-          color: BVColors.scheduleChange,
-          fontWeight: FontWeight.w600,
+          fontSize: 10, color: BVColors.info, fontWeight: FontWeight.w600,
         ),
       ),
     );

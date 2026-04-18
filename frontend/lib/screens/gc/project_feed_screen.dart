@@ -7,7 +7,6 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/extracted_item_card.dart';
 import '../../widgets/loading_overlay.dart';
 
-// Filter state provider
 final _feedFilterProvider = StateProvider<TierType?>((ref) => null);
 
 class ProjectFeedScreen extends ConsumerWidget {
@@ -20,21 +19,15 @@ class ProjectFeedScreen extends ConsumerWidget {
 
     return Column(
       children: [
-        // ── Filter chips ─────────────────────────────────────────────────
         _FilterBar(
           selected: filter,
-          onSelected: (t) =>
-              ref.read(_feedFilterProvider.notifier).state = t,
+          onSelected: (t) => ref.read(_feedFilterProvider.notifier).state = t,
         ),
-
-        // ── Feed list ────────────────────────────────────────────────────
         Expanded(
           child: feedAsync.when(
-            loading: () =>
-                const InlineLoader(message: 'Loading project feed…'),
+            loading: () => const InlineLoader(message: 'Loading project feed…'),
             error: (e, _) => Center(
-              child: Text('Error: $e',
-                  style: const TextStyle(color: BVColors.blocker)),
+              child: Text('Error: $e', style: const TextStyle(color: BVColors.danger)),
             ),
             data: (items) {
               final filtered = filter == null
@@ -44,21 +37,17 @@ class ProjectFeedScreen extends ConsumerWidget {
               if (filtered.isEmpty) {
                 return EmptyState(
                   icon: Icons.feed_outlined,
-                  title: filter == null
-                      ? 'No items in the feed yet'
-                      : 'No ${filter.label} items',
+                  title: filter == null ? 'No items in the feed yet' : 'No ${filter.label} items',
                   subtitle: 'Items will appear as workers submit voice memos.',
                 );
               }
 
               return RefreshIndicator(
-                onRefresh: () async =>
-                    ref.invalidate(gcProjectFeedProvider),
+                onRefresh: () async => ref.invalidate(gcProjectFeedProvider),
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: filtered.length,
-                  itemBuilder: (_, i) =>
-                      ExtractedItemCard(item: filtered[i]),
+                  itemBuilder: (_, i) => ExtractedItemCard(item: filtered[i]),
                 ),
               );
             },
@@ -72,31 +61,28 @@ class ProjectFeedScreen extends ConsumerWidget {
 class _FilterBar extends StatelessWidget {
   final TierType? selected;
   final void Function(TierType?) onSelected;
-
   const _FilterBar({required this.selected, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: BVColors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: BVColors.background,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _FilterChip(
+            _Pill(
               label: 'All',
-              isSelected: selected == null,
-              color: BVColors.primary,
+              selected: selected == null,
               onTap: () => onSelected(null),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             ...TierType.values.map((t) => Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _FilterChip(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _Pill(
                     label: t.label,
-                    isSelected: selected == t,
-                    color: t.color,
+                    selected: selected == t,
                     onTap: () => onSelected(selected == t ? null : t),
                   ),
                 )),
@@ -107,18 +93,11 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
+class _Pill extends StatelessWidget {
   final String label;
-  final bool isSelected;
-  final Color color;
+  final bool selected;
   final VoidCallback onTap;
-
-  const _FilterChip({
-    required this.label,
-    required this.isSelected,
-    required this.color,
-    required this.onTap,
-  });
+  const _Pill({required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -126,20 +105,17 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? color : BVColors.background,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? color : BVColors.divider,
-          ),
+          color: selected ? BVColors.primary : BVColors.surface,
+          borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: isSelected ? Colors.white : BVColors.textSecondary,
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? BVColors.onPrimary : BVColors.textSecondary,
           ),
         ),
       ),

@@ -217,6 +217,7 @@ class RecordFlowController extends AsyncNotifier<List<AiExtractedItem>> {
   String? _requestId;
   VoiceMemoDraft? _draft;
   Timer? _pollTimer;
+  bool isPolling = false;
 
   @override
   Future<List<AiExtractedItem>> build() async {
@@ -320,6 +321,7 @@ class RecordFlowController extends AsyncNotifier<List<AiExtractedItem>> {
 
   void _startPolling() {
     _pollTimer?.cancel();
+    isPolling = true;
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
       if (_requestId == null) return;
       try {
@@ -332,10 +334,12 @@ class RecordFlowController extends AsyncNotifier<List<AiExtractedItem>> {
           final parsed = itemsRaw
               .map((e) => _fromServerItem(Map<String, dynamic>.from(e)))
               .toList();
+          isPolling = false;
           state = AsyncValue.data(parsed);
           await _persistDraft();
           _pollTimer?.cancel();
         } else if (status == 'failed') {
+          isPolling = false;
           state = AsyncValue.error(
             Exception(res['error'] ?? 'AI processing failed'),
             StackTrace.current,

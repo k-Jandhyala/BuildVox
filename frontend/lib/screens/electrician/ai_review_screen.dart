@@ -14,7 +14,9 @@ class AiReviewScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final items = ref.watch(recordFlowProvider).valueOrNull ?? const [];
+    final asyncItems = ref.watch(recordFlowProvider);
+    final items = asyncItems.valueOrNull ?? const [];
+    final isPolling = ref.watch(recordFlowProvider.notifier).isPolling;
     final selected = ref.watch(selectedSiteSummaryProvider)?.site;
 
     return Scaffold(
@@ -30,6 +32,21 @@ class AiReviewScreen extends ConsumerWidget {
       ),
       body: selected == null
           ? const Center(child: Text('No selected jobsite'))
+          : asyncItems.isLoading || isPolling
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('AI is extracting action items…',
+                          style: TextStyle(color: Color(0xFFCBD5E1))),
+                    ],
+                  ),
+                )
+          : asyncItems.hasError
+              ? Center(child: Text('Error: ${asyncItems.error}',
+                  style: const TextStyle(color: Colors.redAccent)))
           : items.isEmpty
               ? const _EmptyReviewState()
               : ListView(

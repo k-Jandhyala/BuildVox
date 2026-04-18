@@ -4,12 +4,12 @@ class SupabaseService {
   /// Keys must match `--dart-define=SUPABASE_URL=...` / `SUPABASE_ANON_KEY=...`.
   static const String _supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'https://ptsxvlufpguyncagotqw.supabase.co',
+    defaultValue: 'https://mkmrrenfekhlvxdiljpm.supabase.co',
   );
   static const String _supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
     defaultValue:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0c3h2bHVmcGd1eW5jYWdvdHF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyODA4NjIsImV4cCI6MjA5MTg1Njg2Mn0.ajmIz45Sf1fwweYueD9ydJqsU_iXPN-Tn1nyDCJ0-g8',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rbXJyZW5mZWtobHZ4ZGlsanBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NDc0NDYsImV4cCI6MjA5MjAyMzQ0Nn0.RuffP7lejnfQoZuPYaFAxDk8Vqh8PQI3iuYZqdIkOTc',
   );
 
   static bool _initialized = false;

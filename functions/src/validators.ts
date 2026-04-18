@@ -64,7 +64,7 @@ export function validateGeminiResponse(raw: unknown): GeminiExtractionResult {
     throw new Error("Missing items array");
   }
   if (obj.items.length === 0) {
-    throw new Error("Gemini returned an empty items array");
+    console.warn("[Gemini] Returned 0 items. Summary:", obj.overall_summary);
   }
 
   const items: GeminiExtractedItem[] = obj.items.map(

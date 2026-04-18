@@ -5,12 +5,9 @@ import '../theme.dart';
 import 'tier_badge.dart';
 import 'urgency_chip.dart';
 
-/// A card that renders a single extracted item.
-/// Used across GC, manager, and admin screens.
 class ExtractedItemCard extends StatelessWidget {
   final ExtractedItemModel item;
   final VoidCallback? onTap;
-  /// Extra trailing action (e.g. "Assign" button for managers).
   final Widget? trailing;
 
   const ExtractedItemCard({
@@ -25,89 +22,125 @@ class ExtractedItemCard extends StatelessWidget {
     final timeStr = item.createdAt != null
         ? DateFormat('MMM d, h:mm a').format(item.createdAt!)
         : '';
+    final leftColor = _tierColor(item.tier);
 
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Header row ─────────────────────────────────────────────────
-              Row(
-                children: [
-                  TierBadge(tier: item.tier),
-                  const SizedBox(width: 8),
-                  UrgencyChip(urgency: item.urgency),
-                  const Spacer(),
-                  if (item.trade.isNotEmpty)
-                    _TradeTag(trade: item.trade),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // ── Summary ───────────────────────────────────────────────────
-              Text(
-                item.normalizedSummary,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: BVColors.onSurface,
-                  fontWeight: FontWeight.w500,
-                  height: 1.45,
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      decoration: BoxDecoration(
+        color: BVColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x26000000), blurRadius: 8, offset: Offset(0, 2)),
+        ],
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            // Left tier color bar
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: leftColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  bottomLeft: Radius.circular(16),
                 ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
               ),
-
-              // ── Location ──────────────────────────────────────────────────
-              if (item.unitOrArea != null && item.unitOrArea!.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on_outlined,
-                        size: 13, color: BVColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Text(
-                      item.unitOrArea!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: BVColors.textSecondary,
-                      ),
-                    ),
-                  ],
+            ),
+            Expanded(
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
                 ),
-              ],
-
-              const SizedBox(height: 10),
-              const Divider(height: 1),
-              const SizedBox(height: 10),
-
-              // ── Footer row ────────────────────────────────────────────────
-              Row(
-                children: [
-                  // Status pill
-                  _StatusPill(status: item.status),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      timeStr,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: BVColors.textSecondary,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header row
+                      Row(
+                        children: [
+                          TierBadge(tier: item.tier),
+                          const SizedBox(width: 6),
+                          UrgencyChip(urgency: item.urgency),
+                          const Spacer(),
+                          if (item.trade.isNotEmpty)
+                            _TradeTag(trade: item.trade),
+                        ],
                       ),
-                    ),
+                      const SizedBox(height: 10),
+
+                      // Summary
+                      Text(
+                        item.normalizedSummary,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: BVColors.onSurface,
+                          fontWeight: FontWeight.w500,
+                          height: 1.45,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+
+                      // Location
+                      if (item.unitOrArea != null &&
+                          item.unitOrArea!.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined,
+                                size: 12, color: BVColors.textSecondary),
+                            const SizedBox(width: 4),
+                            Text(
+                              item.unitOrArea!,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: BVColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      const SizedBox(height: 10),
+
+                      // Footer row
+                      Row(
+                        children: [
+                          _StatusPill(status: item.status),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              timeStr,
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: BVColors.textMuted),
+                            ),
+                          ),
+                          if (trailing != null) trailing!,
+                        ],
+                      ),
+                    ],
                   ),
-                  if (trailing != null) trailing!,
-                ],
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+Color _tierColor(TierType tier) {
+  return switch (tier) {
+    TierType.issueOrBlocker => BVColors.danger,
+    TierType.materialRequest => BVColors.info,
+    TierType.scheduleChange => BVColors.primary,
+    TierType.progressUpdate => BVColors.success,
+  };
 }
 
 class _TradeTag extends StatelessWidget {
@@ -119,9 +152,8 @@ class _TradeTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: BVColors.background,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: BVColors.divider),
+        color: BVColors.surfaceOverlay,
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         trade[0].toUpperCase() + trade.substring(1),
@@ -142,10 +174,10 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: status.color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(4),
+        color: status.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         status.label,

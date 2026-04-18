@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Read(//usr/local/**)",
-      "Bash(export PATH=\"$PATH:/mnt/c/Program Files/nodejs\")"
+      "Bash(export PATH=\"$PATH:/mnt/c/Program Files/nodejs\")",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(flutter pub *)",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\mkmax\\\\OneDrive\\\\Documents\\\\GitHub\\\\BuildVox\\\\frontend && flutter pub get 2>&1\")",
+      "Bash(powershell.exe -NoProfile -Command \"cd 'C:\\\\Users\\\\mkmax\\\\OneDrive\\\\Documents\\\\GitHub\\\\BuildVox\\\\frontend'; flutter pub get\")",
+      "Bash(powershell.exe -NoProfile -Command \"Get-Command flutter -ErrorAction SilentlyContinue | Select-Object Source; [System.Environment]::GetEnvironmentVariable\\('PATH','User'\\) -split ';' | Select-String flutter\")",
+      "Bash(powershell.exe -NoProfile -Command '[System.Environment]::GetEnvironmentVariable\\('\\\\''PATH'\\\\'','\\\\''Machine'\\\\''\\) -split '\\\\'';'\\\\'' | Where-Object { $_ -match '\\\\''flutter|dart'\\\\'' }')",
+      "Bash(\"../flutter/bin/flutter\" pub *)",
+      "Bash(\"../flutter/bin/flutter\" analyze *)"
     ]
   }
 }

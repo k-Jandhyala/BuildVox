@@ -82,7 +82,16 @@ class _ElectricianRecordScreenState
     final path =
         '${dir.path}/memo_${DateTime.now().millisecondsSinceEpoch}.m4a';
     await _recorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 16000,
+          numChannels: 1,
+          androidConfig: AndroidRecordConfig(
+            audioSource: AndroidAudioSource.defaultSource,
+          ),
+        ),
+        path: path);
     HapticFeedback.heavyImpact();
     setState(() {
       _state = RecordUiState.recording;

@@ -21,15 +21,14 @@ class GcTaskBoardScreen extends ConsumerWidget {
     return tasksAsync.when(
       loading: () => const InlineLoader(message: 'Loading your tasks…'),
       error: (e, _) => Center(
-        child: Text('Error: $e', style: const TextStyle(color: BVColors.blocker)),
+        child: Text('Error: $e', style: const TextStyle(color: BVColors.danger)),
       ),
       data: (tasks) {
         if (tasks.isEmpty) {
           return const EmptyState(
             icon: Icons.task_outlined,
             title: 'No tasks yet',
-            subtitle:
-                'Tasks you assign (including to yourself) will show up here.',
+            subtitle: 'Tasks you assign (including to yourself) will show up here.',
           );
         }
 
@@ -46,15 +45,11 @@ class GcTaskBoardScreen extends ConsumerWidget {
 
         for (final t in open) {
           final due = t.dueDate;
-          if (due == null) {
-            dueLater.add(t);
-            continue;
-          }
+          if (due == null) { dueLater.add(t); continue; }
           final dueDay = DateTime(due.year, due.month, due.day);
           if (dueDay.isBefore(today)) {
             overdue.add(t);
-          } else if (dueDay.isBefore(dueSoonCutoff) ||
-              dueDay.isAtSameMomentAs(dueSoonCutoff)) {
+          } else if (!dueDay.isAfter(dueSoonCutoff)) {
             dueSoon.add(t);
           } else {
             dueLater.add(t);
@@ -62,14 +57,10 @@ class GcTaskBoardScreen extends ConsumerWidget {
         }
 
         int cmp(TaskAssignmentModel a, TaskAssignmentModel b) {
-          final ad = a.dueDate ?? DateTime(9999);
-          final bd = b.dueDate ?? DateTime(9999);
-          final byDue = ad.compareTo(bd);
+          final byDue = (a.dueDate ?? DateTime(9999)).compareTo(b.dueDate ?? DateTime(9999));
           if (byDue != 0) return byDue;
-          return (b.createdAt ?? DateTime(0))
-              .compareTo(a.createdAt ?? DateTime(0));
+          return (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0));
         }
-
         overdue.sort(cmp);
         dueSoon.sort(cmp);
         dueLater.sort(cmp);
@@ -81,19 +72,10 @@ class GcTaskBoardScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
-              if (overdue.isNotEmpty)
-                _DueSection(
-                    label: 'Overdue', color: BVColors.blocker, tasks: overdue),
-              if (dueSoon.isNotEmpty)
-                _DueSection(
-                    label: 'Due soon', color: BVColors.primary, tasks: dueSoon),
-              if (dueLater.isNotEmpty)
-                _DueSection(
-                    label: 'Due later',
-                    color: BVColors.textSecondary,
-                    tasks: dueLater),
-              if (done.isNotEmpty)
-                _DueSection(label: 'Done', color: BVColors.done, tasks: done),
+              _DueSection(label: 'Overdue', color: BVColors.danger, tasks: overdue),
+              _DueSection(label: 'Due Soon', color: BVColors.primary, tasks: dueSoon),
+              _DueSection(label: 'Due Later', color: BVColors.textSecondary, tasks: dueLater),
+              _DueSection(label: 'Done', color: BVColors.success, tasks: done),
             ],
           ),
         );
@@ -106,34 +88,28 @@ class _DueSection extends StatelessWidget {
   final String label;
   final Color color;
   final List<TaskAssignmentModel> tasks;
-  const _DueSection({
-    required this.label,
-    required this.color,
-    required this.tasks,
-  });
+  const _DueSection({required this.label, required this.color, required this.tasks});
 
   @override
   Widget build(BuildContext context) {
+    if (tasks.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
           child: Row(
             children: [
               Container(
-                width: 10,
-                height: 10,
+                width: 8, height: 8,
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Text(
                 '${label.toUpperCase()}  ·  ${tasks.length}',
                 style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: BVColors.textSecondary,
-                  letterSpacing: 0.8,
+                  fontSize: 11, fontWeight: FontWeight.w700,
+                  color: BVColors.textSecondary, letterSpacing: 0.8,
                 ),
               ),
             ],
@@ -159,7 +135,15 @@ class _TaskBoardCard extends StatelessWidget {
           future: DatabaseService.getUser(task.assignedToUserId),
           builder: (context, userSnap) {
             final assignee = userSnap.data;
-            return Card(
+            return Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              decoration: BoxDecoration(
+                color: BVColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x26000000), blurRadius: 8, offset: Offset(0, 2)),
+                ],
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
@@ -175,39 +159,31 @@ class _TaskBoardCard extends StatelessWidget {
                           if (task.dueDate != null)
                             Text(
                               'Due ${DateFormat('MMM d').format(task.dueDate!)}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: BVColors.textSecondary,
-                              ),
+                              style: const TextStyle(fontSize: 11, color: BVColors.textMuted),
                             ),
                         ],
                       ),
                     const SizedBox(height: 8),
                     Text(
-                      item?.normalizedSummary ?? 'Loading…',
+                      item?.normalizedSummary ?? '…',
                       style: const TextStyle(
-                        fontSize: 13,
-                        color: BVColors.onSurface,
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
+                        fontSize: 13, color: BVColors.onSurface,
+                        fontWeight: FontWeight.w500, height: 1.4,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 10),
-                    const Divider(height: 1),
-                    const SizedBox(height: 8),
                     Row(
                       children: [
                         if (assignee != null) ...[
                           CircleAvatar(
                             radius: 12,
-                            backgroundColor: BVColors.primary.withOpacity(0.15),
+                            backgroundColor: BVColors.primary.withValues(alpha: 0.15),
                             child: Text(
                               assignee.initials,
                               style: const TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 9, fontWeight: FontWeight.w700,
                                 color: BVColors.primary,
                               ),
                             ),
@@ -216,21 +192,13 @@ class _TaskBoardCard extends StatelessWidget {
                           Text(
                             assignee.name,
                             style: const TextStyle(
-                              fontSize: 12,
-                              color: BVColors.onSurface,
+                              fontSize: 12, color: BVColors.onSurface,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                         const Spacer(),
-                        Text(
-                          task.status.label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: task.status.color,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        _StatusPill(status: task.status),
                       ],
                     ),
                   ],
@@ -244,3 +212,24 @@ class _TaskBoardCard extends StatelessWidget {
   }
 }
 
+class _StatusPill extends StatelessWidget {
+  final ItemStatus status;
+  const _StatusPill({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: status.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        status.label,
+        style: TextStyle(
+          fontSize: 10, fontWeight: FontWeight.w700, color: status.color,
+        ),
+      ),
+    );
+  }
+}

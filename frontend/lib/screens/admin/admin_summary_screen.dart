@@ -14,7 +14,7 @@ class AdminSummaryScreen extends ConsumerWidget {
     return itemsAsync.when(
       loading: () => const InlineLoader(message: 'Loading summary…'),
       error: (e, _) => Center(
-        child: Text('Error: $e', style: const TextStyle(color: BVColors.blocker)),
+        child: Text('Error: $e', style: const TextStyle(color: BVColors.danger)),
       ),
       data: (items) {
         int countTier(TierType tier) => items.where((i) => i.tier == tier).length;
@@ -24,38 +24,37 @@ class AdminSummaryScreen extends ConsumerWidget {
         final materials = countTier(TierType.materialRequest);
         final schedule = countTier(TierType.scheduleChange);
         final progress = countTier(TierType.progressUpdate);
-
         final critical = countUrg(UrgencyLevel.critical);
         final high = countUrg(UrgencyLevel.high);
 
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
           children: [
             _SummaryCard(
-              title: 'Project pulse',
+              title: 'Project Pulse',
               subtitle: 'High-level counts from extracted items',
               rows: [
-                _SummaryRow('Blockers', blockers, BVColors.blocker),
-                _SummaryRow('Material requests', materials, BVColors.materialRequest),
-                _SummaryRow('Schedule changes', schedule, BVColors.scheduleChange),
-                _SummaryRow('Progress updates', progress, BVColors.progressUpdate),
+                _Row('Blockers', blockers, BVColors.danger),
+                _Row('Material Requests', materials, BVColors.info),
+                _Row('Schedule Changes', schedule, BVColors.primary),
+                _Row('Progress Updates', progress, BVColors.success),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             _SummaryCard(
               title: 'Urgency',
               subtitle: 'Where attention is needed most',
               rows: [
-                _SummaryRow('Critical', critical, BVColors.critical),
-                _SummaryRow('High', high, BVColors.high),
+                _Row('Critical', critical, BVColors.danger),
+                _Row('High', high, BVColors.primary),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             _SummaryCard(
-              title: 'Total extracted items',
+              title: 'Total Extracted Items',
               subtitle: 'Across all projects in the system',
               rows: [
-                _SummaryRow('Total', items.length, BVColors.primary),
+                _Row('Total', items.length, BVColors.primary),
               ],
             ),
           ],
@@ -65,17 +64,17 @@ class AdminSummaryScreen extends ConsumerWidget {
   }
 }
 
-class _SummaryRow {
+class _Row {
   final String label;
   final int value;
   final Color color;
-  const _SummaryRow(this.label, this.value, this.color);
+  const _Row(this.label, this.value, this.color);
 }
 
 class _SummaryCard extends StatelessWidget {
   final String title;
   final String subtitle;
-  final List<_SummaryRow> rows;
+  final List<_Row> rows;
   const _SummaryCard({
     required this.title,
     required this.subtitle,
@@ -88,8 +87,10 @@ class _SummaryCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: BVColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: BVColors.divider),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x26000000), blurRadius: 8, offset: Offset(0, 2)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -97,50 +98,39 @@ class _SummaryCard extends StatelessWidget {
           Text(
             title,
             style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: BVColors.onSurface,
+              fontSize: 16, fontWeight: FontWeight.w700, color: BVColors.onSurface,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             subtitle,
             style: const TextStyle(
-              fontSize: 12,
-              color: BVColors.textSecondary,
-              height: 1.4,
+              fontSize: 13, color: BVColors.textSecondary, height: 1.4,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           ...rows.map((r) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
                     Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: r.color,
-                        shape: BoxShape.circle,
-                      ),
+                      width: 8, height: 8,
+                      decoration: BoxDecoration(color: r.color, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         r.label,
                         style: const TextStyle(
-                          color: BVColors.onSurface,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          color: BVColors.onSurface, fontSize: 14, fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
                     Text(
                       '${r.value}',
                       style: TextStyle(
-                        color: r.color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        color: r.value > 0 ? r.color : BVColors.textMuted,
+                        fontSize: 15, fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -151,4 +141,3 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 }
-

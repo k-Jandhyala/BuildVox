@@ -138,6 +138,7 @@ export async function extractFromAudio(
   const responseText = result.response.text();
 
   console.log("[Gemini] Raw response length:", responseText.length);
+  console.log("[Gemini] Raw response preview:", responseText.substring(0, 500));
 
   // Parse and validate
   let parsed: unknown;

@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../models/extracted_item_model.dart';
 import '../../models/task_assignment_model.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/extracted_items_provider.dart';
 import '../../services/database_service.dart';
 import '../../theme.dart';
@@ -187,8 +186,8 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: status.color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(6),
+        color: status.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         status.label,

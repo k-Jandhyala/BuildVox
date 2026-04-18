@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/extracted_items_provider.dart';
 import '../../services/functions_service.dart';
 import '../../theme.dart';
@@ -21,9 +22,12 @@ class _AdminHomeState extends ConsumerState<AdminHome> {
 
   @override
   Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
+    final roleLabel = user?.roleLabel ?? 'BuildVox';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BuildVox  ·  Admin'),
+        title: Text(roleLabel),
         actions: const [AccountMenuButton()],
       ),
       body: IndexedStack(
@@ -215,9 +219,8 @@ class _AdminCountBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: BVColors.primary.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: BVColors.primary.withOpacity(0.2)),
+        color: BVColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
@@ -261,8 +264,10 @@ class _AdminCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: BVColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: BVColors.divider),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x26000000), blurRadius: 8, offset: Offset(0, 2)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -318,9 +323,8 @@ class _ResultBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

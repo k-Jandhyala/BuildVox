@@ -17,8 +17,7 @@ class BlockersScreen extends ConsumerWidget {
     return blockersAsync.when(
       loading: () => const InlineLoader(message: 'Loading blockers…'),
       error: (e, _) => Center(
-        child: Text('Error: $e',
-            style: const TextStyle(color: BVColors.blocker)),
+        child: Text('Error: $e', style: const TextStyle(color: BVColors.danger)),
       ),
       data: (items) {
         if (items.isEmpty) {
@@ -29,21 +28,16 @@ class BlockersScreen extends ConsumerWidget {
           );
         }
 
-        // Sort: critical first, then by date
-        final sorted = [...items];
-        sorted.sort((a, b) {
-          final urgencyOrder = {
-            UrgencyLevel.critical: 0,
-            UrgencyLevel.high: 1,
-            UrgencyLevel.medium: 2,
-            UrgencyLevel.low: 3,
-          };
-          final ua = urgencyOrder[a.urgency] ?? 4;
-          final ub = urgencyOrder[b.urgency] ?? 4;
-          if (ua != ub) return ua.compareTo(ub);
-          return (b.createdAt ?? DateTime(0))
-              .compareTo(a.createdAt ?? DateTime(0));
-        });
+        final sorted = [...items]..sort((a, b) {
+            const order = {
+              UrgencyLevel.critical: 0, UrgencyLevel.high: 1,
+              UrgencyLevel.medium: 2, UrgencyLevel.low: 3,
+            };
+            final ua = order[a.urgency] ?? 4;
+            final ub = order[b.urgency] ?? 4;
+            if (ua != ub) return ua.compareTo(ub);
+            return (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0));
+          });
 
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(gcBlockersProvider),
@@ -67,23 +61,20 @@ class _SummaryBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: BVColors.blocker.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: BVColors.blocker.withOpacity(0.3)),
+        color: BVColors.dangerBg,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
-          const Icon(Icons.block_rounded, color: BVColors.blocker, size: 18),
+          const Icon(Icons.block_rounded, color: BVColors.danger, size: 18),
           const SizedBox(width: 8),
           Text(
             '$count active blocker${count != 1 ? 's' : ''} — attention required',
             style: const TextStyle(
-              fontSize: 13,
-              color: BVColors.blocker,
-              fontWeight: FontWeight.w600,
+              fontSize: 13, color: BVColors.danger, fontWeight: FontWeight.w600,
             ),
           ),
         ],
