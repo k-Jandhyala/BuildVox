@@ -394,6 +394,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: ListView(
+        // Ancestor: do not clip children horizontally (chip row scrolls inside FieldNoteTagChipRow).
+        clipBehavior: Clip.none,
         padding: const EdgeInsets.all(16),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [

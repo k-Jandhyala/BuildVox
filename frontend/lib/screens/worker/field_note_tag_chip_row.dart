@@ -1,11 +1,19 @@
+// BUILDVOX UI FIX — Update screen chip row clipping (all roles: Electrician, Plumber, GC, Manager)
+// File: frontend/lib/screens/worker/field_note_tag_chip_row.dart
+// Component: FieldNoteTagChipRow — shared by lib/screens/electrician/electrician_record_screen.dart
+//
+// Root cause addressed: ClipRect + Stack(clipBehavior: hardEdge) clipped horizontal chip
+// painting; horizontal ListView is replaced with SingleChildScrollView + Row (overflow-x: auto
+// equivalent), clip removed, chips given non-shrinking intrinsic width + nowrap labels.
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 import 'trade_field_note_config.dart';
 
-/// Horizontally scrollable update-type chips with edge fades (Solution A).
-/// Fixed height 44dp; chips visually ~36dp with 44dp min tap height.
+/// Horizontally scrollable update-type chips (overflow-x: auto equivalent).
+/// Full width; does not shrink. Edge fades hint at more content when scrollable.
 class FieldNoteTagChipRow extends StatefulWidget {
   final List<FieldNoteTagDefinition> tags;
   final FieldNoteTagDefinition selected;
@@ -27,7 +35,7 @@ class _FieldNoteTagChipRowState extends State<FieldNoteTagChipRow> {
   bool _showLeftFade = false;
   bool _showRightFade = true;
 
-  static const double _rowHeight = 44;
+  static const double _rowViewportHeight = 52;
   static const double _fadeWidth = 20;
 
   @override
@@ -62,70 +70,74 @@ class _FieldNoteTagChipRowState extends State<FieldNoteTagChipRow> {
   Widget build(BuildContext context) {
     final bg = BVColors.background;
 
+    // width: 100%, flex-shrink: 0 equivalent — expand to parent max width
     return SizedBox(
-      height: _rowHeight,
-      child: ClipRect(
-        child: Stack(
-          clipBehavior: Clip.hardEdge,
-          children: [
-            ScrollConfiguration(
-              behavior: _NoScrollbarScrollBehavior(),
-              child: ListView.separated(
-                controller: _controller,
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.zero,
-                itemCount: widget.tags.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, i) {
-                  final tag = widget.tags[i];
-                  final isSelected = widget.selected == tag;
-                  return _FieldNoteTagChip(
-                    tag: tag,
-                    selected: isSelected,
-                    onTap: () => widget.onSelected(tag),
-                  );
-                },
+      width: double.infinity,
+      height: _rowViewportHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ScrollConfiguration(
+            behavior: _NoScrollbarScrollBehavior(),
+            child: SingleChildScrollView(
+              controller: _controller,
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              // Step 3: padding 4px 16px on scroll content (gap 8px via Row).
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < widget.tags.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    _FieldNoteTagChip(
+                      tag: widget.tags[i],
+                      selected: widget.selected == widget.tags[i],
+                      onTap: () => widget.onSelected(widget.tags[i]),
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (_showLeftFade)
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: _fadeWidth,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [bg, bg.withValues(alpha: 0)],
-                      ),
+          ),
+          if (_showLeftFade)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: _fadeWidth,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [bg, bg.withValues(alpha: 0)],
                     ),
                   ),
                 ),
               ),
-            if (_showRightFade)
-              Positioned(
-                right: 0,
-                top: 0,
-                bottom: 0,
-                width: _fadeWidth,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [bg.withValues(alpha: 0), bg],
-                      ),
+            ),
+          if (_showRightFade)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: _fadeWidth,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [bg.withValues(alpha: 0), bg],
                     ),
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -176,6 +188,7 @@ class _FieldNoteTagChipState extends State<_FieldNoteTagChip> {
     final bg = sel ? _bgActive : Colors.transparent;
     final border = sel ? _bgActive : _borderInactive;
 
+    // flex-shrink: 0 — intrinsic width only, no compression
     return Semantics(
       button: true,
       selected: sel,
@@ -211,6 +224,8 @@ class _FieldNoteTagChipState extends State<_FieldNoteTagChip> {
                       const SizedBox(width: 4),
                       Text(
                         widget.tag.chipLabel,
+                        softWrap: false,
+                        maxLines: 1,
                         style: TextStyle(
                           color: fg,
                           fontSize: 13,
