@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../data/mock_data.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
+import '../electrician/electrician_record_screen.dart';
+import '../worker/trade_field_note_config.dart';
 import '../../theme.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/account_menu_button.dart';
@@ -41,17 +43,26 @@ class _ManagerHomeState extends ConsumerState<ManagerHome> {
       ),
       body: IndexedStack(
         index: tab,
-        children: const [
-          _ManagerDashboardBody(),
-          _ManagerJobsitesBody(),
-          _ManagerApprovalsBody(),
-          _ManagerReportsBody(),
-          _ManagerProfileBody(),
+        children: [
+          const _ManagerDashboardBody(),
+          const ElectricianRecordScreen(
+            layout: TradeFieldNoteLayout.manager,
+            host: FieldNoteHost.managerShell,
+          ),
+          const _ManagerJobsitesBody(),
+          const _ManagerApprovalsBody(),
+          const _ManagerReportsBody(),
+          const _ManagerProfileBody(),
         ],
       ),
       bottomNavigationBar: _ManagerBottomNav(
         selected: tab,
-        onSelect: (i) => ref.read(managerShellTabProvider.notifier).state = i,
+        onSelect: (i) {
+          ref.read(managerShellTabProvider.notifier).state = i;
+          if (i == 1) {
+            ref.read(recordScreenAutofocusTriggerProvider.notifier).state++;
+          }
+        },
       ),
     );
   }
@@ -78,7 +89,7 @@ class _ManagerBottomNav extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Badge(
-                    isLabelVisible: i == 2,
+                    isLabelVisible: i == 3,
                     label: Text('${mockStatsManager.pendingApprovals}'),
                     backgroundColor: BVColors.blocker,
                     child: Icon(icon, color: c(i), size: 24),
@@ -103,10 +114,11 @@ class _ManagerBottomNav extends StatelessWidget {
         child: Row(
           children: [
             item(Icons.dashboard_customize_outlined, 'Dashboard', 0),
-            item(Icons.map_outlined, 'Jobsites', 1),
-            item(Icons.fact_check_outlined, 'Approvals', 2),
-            item(Icons.bar_chart_rounded, 'Reports', 3),
-            item(Icons.person_outline_rounded, 'Profile', 4),
+            item(Icons.edit_note_rounded, 'Updates', 1),
+            item(Icons.map_outlined, 'Jobsites', 2),
+            item(Icons.fact_check_outlined, 'Approvals', 3),
+            item(Icons.bar_chart_rounded, 'Reports', 4),
+            item(Icons.person_outline_rounded, 'Profile', 5),
           ],
         ),
       ),
@@ -138,7 +150,7 @@ class _ManagerDashboardBody extends ConsumerWidget {
               _KpiCard('Total Jobsites', '${m.totalJobsites}', Icons.map_outlined, BVColors.accent),
               _KpiCard('Open Blockers', '${m.openBlockers}', Icons.block_rounded, BVColors.blocker, onTap: () {}),
               _KpiCard('Pending Approvals', '${m.pendingApprovals}', Icons.fact_check_outlined, BVColors.primary, onTap: () {
-                ref.read(managerShellTabProvider.notifier).state = 2;
+                ref.read(managerShellTabProvider.notifier).state = 3;
               }),
               _KpiCard('Workers Active', '${m.workersActive}', Icons.groups_2_outlined, BVColors.done),
               _KpiCard('Safety Alerts', '${m.safetyAlerts}', Icons.shield_outlined, BVColors.blocker),
@@ -580,7 +592,7 @@ class _ManagerProfileBody extends ConsumerWidget {
         ListTile(
           title: const Text('Pending Approvals'),
           trailing: Text('${mockStatsManager.pendingApprovals}'),
-          onTap: () => ref.read(managerShellTabProvider.notifier).state = 2,
+          onTap: () => ref.read(managerShellTabProvider.notifier).state = 3,
         ),
         OutlinedButton(
           onPressed: () async {

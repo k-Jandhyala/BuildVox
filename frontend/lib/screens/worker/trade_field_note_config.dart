@@ -6,6 +6,7 @@ import '../../models/electrician_models.dart';
 enum FieldNoteHost {
   tradeWorker,
   gcShell,
+  managerShell,
 }
 
 /// Describes one quick-tag chip on the field note screen (text + icon, no emoji).
@@ -128,6 +129,46 @@ class TradeFieldNoteLayout {
     defaultTagIndex: 0,
     placeholder:
         'Post a site-wide update or notice for all trades.',
+    tags: [
+      FieldNoteTagDefinition(
+        chipIcon: Icons.campaign_outlined,
+        chipLabel: 'Site Notice',
+        shortTypeLabel: 'Site Notice',
+        category: ElectricianCategory.generalReport,
+      ),
+      FieldNoteTagDefinition(
+        chipIcon: Icons.block_rounded,
+        chipLabel: 'Blocker',
+        shortTypeLabel: 'Blocker',
+        category: ElectricianCategory.blocker,
+        isBlocker: true,
+      ),
+      FieldNoteTagDefinition(
+        chipIcon: Icons.flag_outlined,
+        chipLabel: 'Milestone',
+        shortTypeLabel: 'Milestone',
+        category: ElectricianCategory.taskUpdate,
+      ),
+      FieldNoteTagDefinition(
+        chipIcon: Icons.shield_outlined,
+        chipLabel: 'Safety',
+        shortTypeLabel: 'Safety',
+        category: ElectricianCategory.siteIssue,
+      ),
+      FieldNoteTagDefinition(
+        chipIcon: Icons.assignment_outlined,
+        chipLabel: 'Inspection',
+        shortTypeLabel: 'Inspection',
+        category: ElectricianCategory.generalReport,
+      ),
+    ],
+  );
+
+  /// Same tags as [gc] — Manager site-wide updates.
+  static const TradeFieldNoteLayout manager = TradeFieldNoteLayout(
+    title: 'Post Update',
+    defaultTagIndex: 0,
+    placeholder: 'Post a site-wide update or notice for all trades.',
     tags: [
       FieldNoteTagDefinition(
         chipIcon: Icons.campaign_outlined,
