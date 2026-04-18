@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/mock_data.dart';
 import '../../models/electrician_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
 import '../../theme.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/bv_modal_sheet.dart';
-import '../../widgets/skeleton_shimmer.dart';
 
 /// Shared home for Electrician and Plumber trade workers.
 class TradeWorkerHomeScreen extends ConsumerWidget {
@@ -20,9 +20,13 @@ class TradeWorkerHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final summary = ref.watch(selectedSiteSummaryProvider);
-    final tasks = ref.watch(electricianTasksProvider).valueOrNull ?? const [];
-    final warnings = ref.watch(electricianWarningsProvider);
+    final homeTasks = mockTasksAssignedHome(
+      workerId: isPlumber ? mockPlumberWorkerId : mockElectricianWorkerId,
+      siteId: 'site_001',
+    ).map(mockWorkerTaskToElectricianTask).toList();
+    final warnings = mockSiteWarningsForJobsite('site_001');
     final tradeName = isPlumber ? 'Plumber' : 'Electrician';
+    final stats = isPlumber ? mockStatsPlumber : mockStatsElectrician;
 
     return ListView(
       padding: const EdgeInsets.symmetric(
@@ -40,47 +44,53 @@ class TradeWorkerHomeScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          summary == null ? 'No active jobsite selected' : summary.site.name,
+          summary?.site.name ?? mockPrimaryJobsite.name,
           style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
         ),
         const SizedBox(height: BVSpacing.sectionGap),
-        if (summary != null)
-          GridView.count(
+        GridView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            childAspectRatio: 1.35,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: isPlumber ? 1.25 : 1.35,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
-            children: [
+          ),
+          children: [
+            _StatCard(
+              'High Priority Tasks',
+              '${stats.highPriority}',
+              icon: Icons.priority_high_rounded,
+              accent: BVColors.primary,
+            ),
+            _StatCard(
+              'Blockers',
+              '${stats.blockers}',
+              icon: Icons.block_rounded,
+              accent: BVColors.blocker,
+            ),
+            _StatCard(
+              'Due Today',
+              '${stats.dueToday}',
+              icon: Icons.today_rounded,
+              accent: BVColors.accent,
+            ),
+            _StatCard(
+              'Material Pending',
+              '${stats.materialPending}',
+              icon: Icons.inventory_2_rounded,
+              accent: BVColors.done,
+            ),
+            if (isPlumber)
               _StatCard(
-                'High Priority Tasks',
-                '${summary.highPriorityCount}',
-                icon: Icons.priority_high_rounded,
-                accent: BVColors.primary,
-              ),
-              _StatCard(
-                'Blockers',
-                '${summary.blockerCount}',
-                icon: Icons.block_rounded,
-                accent: BVColors.blocker,
-              ),
-              _StatCard(
-                'Due Today',
-                '${summary.dueTodayCount}',
-                icon: Icons.today_rounded,
+                'Leak Alerts',
+                '${stats.leakAlerts}',
+                icon: Icons.water_damage_outlined,
                 accent: BVColors.accent,
               ),
-              _StatCard(
-                'Material Pending',
-                '${summary.materialPendingCount}',
-                icon: Icons.inventory_2_rounded,
-                accent: BVColors.done,
-              ),
-            ],
-          )
-        else
-          const SkeletonShimmer(height: 230),
+          ],
+        ),
         const SizedBox(height: BVSpacing.sectionGap),
         const _SectionTitle(title: 'Quick Actions'),
         GridView.count(
@@ -137,7 +147,9 @@ class TradeWorkerHomeScreen extends ConsumerWidget {
         _SectionTitle(
           title: 'Site Warnings',
           actionLabel: warnings.isEmpty ? null : 'Open',
-          onAction: warnings.isEmpty ? null : () {},
+          onAction: warnings.isEmpty ? null : () {
+            ref.read(tradeWorkerShellTabProvider.notifier).state = 3;
+          },
         ),
         if (warnings.isEmpty)
           Container(
@@ -163,7 +175,7 @@ class TradeWorkerHomeScreen extends ConsumerWidget {
           actionLabel: 'View all',
           onAction: () => DefaultTabController.of(context),
         ),
-        ..._priorityBuckets(tasks).entries.map((entry) {
+        ..._priorityBuckets(homeTasks).entries.map((entry) {
           if (entry.value.isEmpty) return const SizedBox.shrink();
           return _PrioritySection(
             priority: entry.key,
@@ -171,7 +183,7 @@ class TradeWorkerHomeScreen extends ConsumerWidget {
             showZone: isPlumber,
           );
         }),
-        if (tasks.isEmpty)
+        if (homeTasks.isEmpty)
           const _EmptyDarkCard(message: 'No tasks assigned yet'),
       ],
     );

@@ -29,6 +29,7 @@ enum WarningCategory {
   schedule,
   access,
   weather,
+  leakAlert,
 }
 
 class ElectricianTask {

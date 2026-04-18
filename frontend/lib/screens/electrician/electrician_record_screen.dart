@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/electrician_models.dart';
+import '../../data/mock_data.dart';
 import '../../models/job_site_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
@@ -16,6 +17,7 @@ import '../../providers/electrician_provider.dart';
 import '../../services/functions_service.dart';
 import '../../services/storage_service.dart';
 import '../../theme.dart';
+import '../worker/field_note_tag_chip_row.dart';
 import '../worker/trade_field_note_config.dart';
 
 class ElectricianRecordScreen extends ConsumerStatefulWidget {
@@ -347,22 +349,39 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
       }
     });
 
+    ref.listen<int>(managerShellTabProvider, (prev, next) {
+      if (widget.host != FieldNoteHost.managerShell) return;
+      if (next == 1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _focusNode.requestFocus();
+        });
+      } else {
+        _focusNode.unfocus();
+      }
+    });
+
     // Re-tap quick action / center button while already on this tab.
     ref.listen<int>(recordScreenAutofocusTriggerProvider, (prev, next) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final onFieldNoteTab = widget.host == FieldNoteHost.tradeWorker
-            ? ref.read(tradeWorkerShellTabProvider) == 2
-            : ref.read(gcShellTabProvider) == 2;
-        if (onFieldNoteTab) _focusNode.requestFocus();
+        final onUpdatesTab = switch (widget.host) {
+          FieldNoteHost.tradeWorker => ref.read(tradeWorkerShellTabProvider) == 2,
+          FieldNoteHost.gcShell => ref.read(gcShellTabProvider) == 2,
+          FieldNoteHost.managerShell => ref.read(managerShellTabProvider) == 1,
+        };
+        if (onUpdatesTab) _focusNode.requestFocus();
       });
     });
 
     final summary = ref.watch(selectedSiteSummaryProvider);
     final queue = ref.watch(electricianQueueProvider).valueOrNull ?? const [];
     final queuedCount = queue.where((e) => e.status != QueueStatus.completed).length;
-    final recentAsync = ref.watch(recentFieldNotesProvider);
-    final recent = recentAsync.valueOrNull ?? const <RecentFieldNote>[];
+    final List<RecentFieldNote> recent = widget.host == FieldNoteHost.gcShell ||
+            widget.host == FieldNoteHost.managerShell
+        ? mockRecentFieldNotesForSite('site_001')
+        : (ref.watch(currentUserProvider)?.trade == TradeType.plumbing
+            ? mockRecentFieldNotesForAuthor('Priya Nair')
+            : mockRecentFieldNotesForAuthor('Jordan Lee'));
 
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final screenH = MediaQuery.sizeOf(context).height;
@@ -375,6 +394,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: ListView(
+        // Ancestor: do not clip children horizontally (chip row scrolls inside FieldNoteTagChipRow).
+        clipBehavior: Clip.none,
         padding: const EdgeInsets.all(16),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
@@ -382,13 +403,15 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
             widget.layout.title,
             style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
-            summary == null ? 'No jobsite selected' : 'Current jobsite: ${summary.site.name}',
+            summary == null
+                ? 'Current jobsite: ${mockPrimaryJobsite.name}'
+                : 'Current jobsite: ${summary.site.name}',
             style: const TextStyle(color: Color(0xFF94A3B8)),
           ),
           if (queuedCount > 0 && !_offlineBannerDismissed) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
@@ -399,7 +422,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('☁', style: TextStyle(fontSize: 18)),
+                  const Icon(Icons.cloud_off_outlined, color: BVColors.primary, size: 22),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -418,85 +441,73 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: widget.layout.tags.map((tag) {
-                final selected = _selectedTag == tag;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(tag.chipLabel),
-                    selected: selected,
-                    onSelected: (_) => setState(() => _selectedTag = tag),
-                    selectedColor: BVColors.primary,
-                    labelStyle: TextStyle(
-                      color: selected ? BVColors.onPrimary : BVColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                    backgroundColor: Colors.transparent,
-                    side: BorderSide(
-                      color: selected ? BVColors.primary : BVColors.textSecondary.withValues(alpha: 0.5),
-                    ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                  ),
-                );
-              }).toList(),
-            ),
+          const SizedBox(height: 12),
+          FieldNoteTagChipRow(
+            tags: widget.layout.tags,
+            selected: _selectedTag,
+            onSelected: (tag) => setState(() => _selectedTag = tag),
           ),
-          const SizedBox(height: 14),
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              SizedBox(
-                height: textAreaHeight,
-                child: TextField(
-                  controller: _textController,
-                  focusNode: _focusNode,
-                  maxLines: null,
-                  minLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  textCapitalization: TextCapitalization.sentences,
-                  autocorrect: true,
-                  enableSuggestions: true,
-                  style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.35),
-                  cursorColor: BVColors.primary,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: _inputBg,
-                    hintText: widget.layout.placeholder,
-                    hintStyle: const TextStyle(color: _placeholder, fontSize: 16, height: 1.35),
-                    contentPadding: const EdgeInsets.all(14),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _inputBorder),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _inputBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: BVColors.primary, width: 2),
-                    ),
-                  ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: textAreaHeight,
+            child: TextField(
+              controller: _textController,
+              focusNode: _focusNode,
+              maxLines: null,
+              minLines: null,
+              expands: true,
+              textAlignVertical: TextAlignVertical.top,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              textCapitalization: TextCapitalization.sentences,
+              autocorrect: true,
+              enableSuggestions: true,
+              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.35),
+              cursorColor: BVColors.primary,
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: _inputBg,
+                hintText: widget.layout.placeholder,
+                hintStyle: const TextStyle(color: _placeholder, fontSize: 16, height: 1.35),
+                contentPadding: const EdgeInsets.all(14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _inputBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _inputBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: BVColors.primary, width: 2),
                 ),
               ),
-              Positioned(
-                right: 10,
-                bottom: 8,
-                child: Text(
-                  '${text.length} chars · $words words',
-                  style: TextStyle(
-                    color: BVColors.textSecondary.withValues(alpha: 0.9),
-                    fontSize: 12,
-                  ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              TextButton(
+                onPressed: _confirmClear,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: const Size(44, 44),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Clear',
+                  style: TextStyle(color: BVColors.textSecondary, fontSize: 13),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${text.length} chars · $words words',
+                style: TextStyle(
+                  color: BVColors.textSecondary.withValues(alpha: 0.9),
+                  fontSize: 12,
                 ),
               ),
             ],
@@ -545,17 +556,6 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
                   .toList(),
             ),
           ],
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: _confirmClear,
-              child: const Text(
-                'Clear',
-                style: TextStyle(color: BVColors.textSecondary, fontSize: 13),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -588,7 +588,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          '✦ Submit Update',
+                          'Submit Update',
                           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                         ),
                         SizedBox(width: 8),
@@ -597,7 +597,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
                     ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           const Text(
             'Recent submissions',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
