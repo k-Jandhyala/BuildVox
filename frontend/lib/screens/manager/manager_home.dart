@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/mock_data.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
 import '../../theme.dart';
@@ -9,7 +10,6 @@ import '../../theme/design_tokens.dart';
 import '../../widgets/account_menu_button.dart';
 import '../../widgets/bv_modal_sheet.dart';
 import '../../widgets/role_pill.dart';
-import '../../widgets/skeleton_shimmer.dart';
 
 /// Manager shell — multi-jobsite oversight (no center hump).
 class ManagerHome extends ConsumerStatefulWidget {
@@ -79,7 +79,7 @@ class _ManagerBottomNav extends StatelessWidget {
                 children: [
                   Badge(
                     isLabelVisible: i == 2,
-                    label: const Text('3'),
+                    label: Text('${mockStatsManager.pendingApprovals}'),
                     backgroundColor: BVColors.blocker,
                     child: Icon(icon, color: c(i), size: 24),
                   ),
@@ -119,7 +119,7 @@ class _ManagerDashboardBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sites = ref.watch(electricianJobsitesProvider).valueOrNull ?? [];
+    final m = mockStatsManager;
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: BVSpacing.screenHorizontal, vertical: BVSpacing.sectionGap),
       children: [
@@ -135,39 +135,75 @@ class _ManagerDashboardBody extends ConsumerWidget {
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              _KpiCard('Total Jobsites', '${sites.length}', Icons.map_outlined, BVColors.accent),
-              _KpiCard('Open Blockers', '4', Icons.block_rounded, BVColors.blocker, onTap: () {}),
-              _KpiCard('Pending Approvals', '3', Icons.fact_check_outlined, BVColors.primary, onTap: () {
+              _KpiCard('Total Jobsites', '${m.totalJobsites}', Icons.map_outlined, BVColors.accent),
+              _KpiCard('Open Blockers', '${m.openBlockers}', Icons.block_rounded, BVColors.blocker, onTap: () {}),
+              _KpiCard('Pending Approvals', '${m.pendingApprovals}', Icons.fact_check_outlined, BVColors.primary, onTap: () {
                 ref.read(managerShellTabProvider.notifier).state = 2;
               }),
-              _KpiCard('Workers Active', '24', Icons.groups_2_outlined, BVColors.done),
-              _KpiCard('Safety Alerts', '1', Icons.shield_outlined, BVColors.blocker),
+              _KpiCard('Workers Active', '${m.workersActive}', Icons.groups_2_outlined, BVColors.done),
+              _KpiCard('Safety Alerts', '${m.safetyAlerts}', Icons.shield_outlined, BVColors.blocker),
             ],
           ),
         ),
         const SizedBox(height: 16),
         const Text('Jobsites', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
-        if (sites.isEmpty)
-          const SkeletonShimmer(height: 120)
-        else
-          ...sites.take(5).map((s) => _JobsiteSummaryCard(name: s.name, address: s.address)),
+        ...mockJobsites.map((s) => _JobsiteSummaryCard(site: s)),
         const SizedBox(height: 16),
         const Text('Recent activity', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: BVColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: BVColors.divider),
-          ),
-          child: const Text(
-            'No cross-site activity yet (demo).',
-            style: TextStyle(color: BVColors.textSecondary),
-          ),
-        ),
+        ...mockFieldNotesAllRecent(limit: 5).map((n) => _ManagerActivityCard(note: n)),
       ],
+    );
+  }
+}
+
+class _ManagerActivityCard extends StatelessWidget {
+  final MockFieldNote note;
+
+  const _ManagerActivityCard({required this.note});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: BVColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: BVColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.campaign_outlined, size: 18, color: BVColors.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  note.author,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text(
+                note.type,
+                style: const TextStyle(color: BVColors.textSecondary, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            note.text,
+            style: const TextStyle(color: BVColors.textSecondary, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${mockJobsites.firstWhere((j) => j.id == note.jobsite, orElse: () => mockPrimaryJobsite).name} · ${note.floor} · ${note.submittedAt}',
+            style: const TextStyle(color: BVColors.textSecondary, fontSize: 11),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -215,13 +251,13 @@ class _KpiCard extends StatelessWidget {
 }
 
 class _JobsiteSummaryCard extends StatelessWidget {
-  final String name;
-  final String address;
+  final MockJobSite site;
 
-  const _JobsiteSummaryCard({required this.name, required this.address});
+  const _JobsiteSummaryCard({required this.site});
 
   @override
   Widget build(BuildContext context) {
+    final p = site.progressPercent / 100.0;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -233,16 +269,27 @@ class _JobsiteSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-          Text(address, style: const TextStyle(color: BVColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 8),
-          const LinearProgressIndicator(value: 0.42, color: BVColors.primary, backgroundColor: BVColors.divider),
-          const SizedBox(height: 6),
-          const Row(
+          Row(
             children: [
-              Text('42% complete', style: TextStyle(color: BVColors.textSecondary, fontSize: 11)),
-              Spacer(),
-              Text('2 blockers', style: TextStyle(color: BVColors.blocker, fontSize: 11)),
+              Expanded(
+                child: Text(site.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+              Chip(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                label: Text(site.status, style: const TextStyle(fontSize: 11)),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          Text(site.address, style: const TextStyle(color: BVColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: p, color: BVColors.primary, backgroundColor: BVColors.divider),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text('${site.progressPercent}% complete', style: const TextStyle(color: BVColors.textSecondary, fontSize: 11)),
+              const Spacer(),
+              Text('${site.openBlockers} blockers', style: const TextStyle(color: BVColors.blocker, fontSize: 11)),
             ],
           ),
         ],
@@ -256,20 +303,18 @@ class _ManagerJobsitesBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sites = ref.watch(electricianJobsitesProvider).valueOrNull ?? [];
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         const Text('Jobsites', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
-        if (sites.isEmpty)
-          const Text('No jobsites', style: TextStyle(color: BVColors.textSecondary))
-        else
-          ...sites.map((s) => ListTile(
-                title: Text(s.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                subtitle: Text(s.address, style: const TextStyle(color: BVColors.textSecondary)),
-                trailing: const Chip(label: Text('Active')),
-              )),
+        ...mockJobsites.map(
+          (s) => ListTile(
+            title: Text(s.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            subtitle: Text(s.address, style: const TextStyle(color: BVColors.textSecondary)),
+            trailing: Chip(label: Text(s.status)),
+          ),
+        ),
       ],
     );
   }
@@ -314,10 +359,14 @@ class _ManagerApprovalsBodyState extends State<_ManagerApprovalsBody> with Singl
         Expanded(
           child: TabBarView(
             controller: _tc,
-            children: const [
-              _ApprovalsEmpty(),
-              _ApprovalsEmpty(),
-              _ApprovalsEmpty(),
+            children: [
+              _ApprovalsList(
+                mockApprovals.where((a) => a.type == 'Material Request').toList(),
+              ),
+              _ApprovalsList(
+                mockApprovals.where((a) => a.type == 'Work Order').toList(),
+              ),
+              _ApprovalsList(mockApprovals),
             ],
           ),
         ),
@@ -326,20 +375,76 @@ class _ManagerApprovalsBodyState extends State<_ManagerApprovalsBody> with Singl
   }
 }
 
-class _ApprovalsEmpty extends StatelessWidget {
-  const _ApprovalsEmpty();
+class _ApprovalsList extends StatelessWidget {
+  final List<MockApproval> items;
+
+  const _ApprovalsList(this.items);
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.assignment_outlined, color: BVColors.textSecondary, size: 48),
-          SizedBox(height: 12),
-          Text('No pending approvals', style: TextStyle(color: BVColors.textSecondary)),
-        ],
-      ),
+    if (items.isEmpty) {
+      return const Center(
+        child: Text('No items', style: TextStyle(color: BVColors.textSecondary)),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, i) {
+        final a = items[i];
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: BVColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: BVColors.divider),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    a.type == 'Work Order' ? Icons.assignment_outlined : Icons.inventory_2_outlined,
+                    size: 20,
+                    color: BVColors.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      a.title,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    a.estimatedCost,
+                    style: const TextStyle(color: BVColors.accent, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${a.requestedBy} · ${a.trade}',
+                style: const TextStyle(color: BVColors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${mockJobsites.firstWhere((j) => j.id == a.jobsite, orElse: () => mockPrimaryJobsite).name} · ${a.submittedAt}',
+                style: const TextStyle(color: BVColors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  OutlinedButton(onPressed: () {}, child: const Text('Reject')),
+                  const SizedBox(width: 8),
+                  FilledButton(onPressed: () {}, child: const Text('Approve')),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -474,7 +579,7 @@ class _ManagerProfileBody extends ConsumerWidget {
         ),
         ListTile(
           title: const Text('Pending Approvals'),
-          trailing: const Text('3'),
+          trailing: Text('${mockStatsManager.pendingApprovals}'),
           onTap: () => ref.read(managerShellTabProvider.notifier).state = 2,
         ),
         OutlinedButton(

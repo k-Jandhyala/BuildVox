@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/mock_data.dart';
 import '../../models/electrician_models.dart';
-import '../../providers/electrician_provider.dart';
 import '../../theme.dart';
 
-class ElectricianWarningsScreen extends ConsumerWidget {
+class ElectricianWarningsScreen extends StatelessWidget {
   /// Plumber shell passes `true` to insert the Leak Alerts tab.
   final bool showLeakAlertsTab;
 
@@ -25,12 +24,14 @@ class ElectricianWarningsScreen extends ConsumerWidget {
         return 'Access';
       case WarningCategory.weather:
         return 'Weather';
+      case WarningCategory.leakAlert:
+        return 'Leak Alert';
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final warnings = ref.watch(electricianWarningsProvider);
+  Widget build(BuildContext context) {
+    final warnings = mockSiteWarningsForJobsite('site_001');
     final grouped = <WarningCategory, List<SiteWarning>>{};
     for (final c in WarningCategory.values) {
       grouped[c] = warnings.where((w) => w.category == c).toList();
@@ -100,7 +101,10 @@ class ElectricianWarningsScreen extends ConsumerWidget {
                   warnings: grouped[WarningCategory.inspection] ?? const [],
                   emptyHint: 'No inspection warnings',
                 ),
-                const _LeakAlertsPlaceholder(),
+                _WarningList(
+                  warnings: grouped[WarningCategory.leakAlert] ?? const [],
+                  emptyHint: 'No leak alerts',
+                ),
                 _WarningList(
                   warnings: grouped[WarningCategory.materialShortage] ?? const [],
                   emptyHint: 'No material shortage warnings',
@@ -111,27 +115,6 @@ class ElectricianWarningsScreen extends ConsumerWidget {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LeakAlertsPlaceholder extends StatelessWidget {
-  const _LeakAlertsPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.water_drop_outlined, color: BVColors.accent, size: 48),
-          SizedBox(height: 12),
-          Text(
-            'No active leak alerts',
-            style: TextStyle(color: BVColors.textSecondary, fontSize: 16),
           ),
         ],
       ),

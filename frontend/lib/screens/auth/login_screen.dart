@@ -26,11 +26,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // Quick-fill buttons for demo accounts
   static const _demoAccounts = [
-    ('⚡ Electrician', 'electrician@demo.com', Icons.bolt_rounded),
-    ('🔧 Plumber', 'plumber@demo.com', Icons.handyman_rounded),
-    ('🏗️ GC', 'gc@demo.com', Icons.construction_rounded),
-    ('📊 Manager', 'manager@demo.com', Icons.assignment_rounded),
-    ('🛡️ Admin', 'admin@demo.com', Icons.shield_rounded),
+    ('Electrician', 'electrician@demo.com', Icons.bolt_rounded),
+    ('Plumber', 'plumber@demo.com', Icons.home_repair_service_outlined),
+    ('GC', 'gc@demo.com', Icons.construction_rounded),
+    ('Manager', 'manager@demo.com', Icons.assignment_rounded),
+    ('Admin', 'admin@demo.com', Icons.shield_rounded),
   ];
 
   @override

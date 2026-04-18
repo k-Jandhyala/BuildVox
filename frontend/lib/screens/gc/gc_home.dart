@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/mock_data.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
 import '../../theme.dart';
@@ -9,7 +10,6 @@ import '../../theme/design_tokens.dart';
 import '../../widgets/account_menu_button.dart';
 import '../../widgets/bv_modal_sheet.dart';
 import '../../widgets/role_pill.dart';
-import '../../widgets/skeleton_shimmer.dart';
 import '../electrician/electrician_record_screen.dart';
 import '../electrician/electrician_warnings_screen.dart';
 import '../worker/trade_field_note_config.dart';
@@ -189,7 +189,7 @@ class _GcOverviewBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summary = ref.watch(selectedSiteSummaryProvider);
+    final s = mockStatsGc;
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: BVSpacing.screenHorizontal, vertical: BVSpacing.sectionGap),
       children: [
@@ -198,25 +198,22 @@ class _GcOverviewBody extends ConsumerWidget {
           style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: BVSpacing.sectionGap),
-        if (summary != null)
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.25,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            children: [
-              _GcStat('Total Active Tasks', '12', Icons.list_alt_rounded, BVColors.accent),
-              _GcStat('Open Blockers', '${summary.blockerCount}', Icons.block_rounded, BVColors.blocker),
-              _GcStat('Pending Materials', '${summary.materialPendingCount}', Icons.inventory_2_rounded, BVColors.primary),
-              _GcStat('Workers On-Site', '8', Icons.groups_2_outlined, BVColors.done),
-              _GcStat('Inspections Due', '3', Icons.assignment_turned_in_outlined, BVColors.managerPurple),
-              _GcStat('Safety Warnings', '${ref.watch(electricianWarningsProvider).length}', Icons.shield_outlined, BVColors.blocker),
-            ],
-          )
-        else
-          const SkeletonShimmer(height: 280),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.25,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          children: [
+            _GcStat('Total Active Tasks', '${s.totalActiveTasks}', Icons.list_alt_rounded, BVColors.accent),
+            _GcStat('Open Blockers', '${s.openBlockers}', Icons.block_rounded, BVColors.blocker),
+            _GcStat('Pending Materials', '${s.pendingMaterials}', Icons.inventory_2_rounded, BVColors.primary),
+            _GcStat('Workers On-Site', '${s.workersOnSite}', Icons.groups_2_outlined, BVColors.done),
+            _GcStat('Inspections Due', '${s.inspectionsDue}', Icons.assignment_turned_in_outlined, BVColors.managerPurple),
+            _GcStat('Safety Warnings', '${s.safetyWarnings}', Icons.shield_outlined, BVColors.blocker),
+          ],
+        ),
         const SizedBox(height: BVSpacing.sectionGap),
         const Text(
           'Site activity',
@@ -225,7 +222,7 @@ class _GcOverviewBody extends ConsumerWidget {
         const SizedBox(height: 8),
         _feedFilterRow(context),
         const SizedBox(height: 8),
-        const _GcFeedEmpty(),
+        ...mockFieldNotesFeedForSite('site_001').map((n) => _GcFeedCard(note: n)),
         const SizedBox(height: BVSpacing.sectionGap),
         const Text('Quick actions', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
@@ -303,23 +300,51 @@ class _GcStat extends StatelessWidget {
   }
 }
 
-class _GcFeedEmpty extends StatelessWidget {
-  const _GcFeedEmpty();
+class _GcFeedCard extends StatelessWidget {
+  final MockFieldNote note;
+
+  const _GcFeedCard({required this.note});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: BVColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: BVColors.divider),
       ),
-      child: const Text(
-        'No site updates yet today',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: BVColors.textSecondary),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.person_outline_rounded, size: 18, color: BVColors.primary),
+              const SizedBox(width: 6),
+              Text(
+                note.author,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              Text(
+                note.type,
+                style: const TextStyle(color: BVColors.textSecondary, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            note.text,
+            style: const TextStyle(color: BVColors.textSecondary, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${note.floor} · ${note.submittedAt}',
+            style: const TextStyle(color: BVColors.textSecondary, fontSize: 11),
+          ),
+        ],
       ),
     );
   }
@@ -370,16 +395,22 @@ class _GcTradesBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ListView(
       padding: const EdgeInsets.all(BVSpacing.screenHorizontal),
-      children: const [
-        Text('Trades on site', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
-        SizedBox(height: 12),
-        Text(
-          'Drill into each trade’s workload. (Demo list — connect to live data later.)',
+      children: [
+        const Text('Trades on site', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        const Text(
+          'Drill into each trade workload. Demo preview from mock data.',
           style: TextStyle(color: BVColors.textSecondary),
         ),
-        SizedBox(height: 16),
-        _TradeRow(name: 'Electrical', workers: 4, tasks: 9, blockers: 1),
-        _TradeRow(name: 'Plumbing', workers: 3, tasks: 6, blockers: 0),
+        const SizedBox(height: 16),
+        ...mockGcTradeSummaries.map(
+          (t) => _TradeRow(
+            name: t.trade,
+            workers: t.workerCount,
+            tasks: t.taskCount,
+            blockers: t.blockerCount,
+          ),
+        ),
       ],
     );
   }

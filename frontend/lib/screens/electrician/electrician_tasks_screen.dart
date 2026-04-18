@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../data/mock_data.dart';
 import '../../models/electrician_models.dart';
 import '../../models/extracted_item_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/electrician_provider.dart';
 import '../../theme.dart';
 
 class ElectricianTasksScreen extends ConsumerStatefulWidget {
@@ -26,7 +26,8 @@ class _ElectricianTasksScreenState extends ConsumerState<ElectricianTasksScreen>
 
   @override
   Widget build(BuildContext context) {
-    final all = ref.watch(electricianTasksProvider).valueOrNull ?? const [];
+    final isPlumber = ref.watch(currentUserProvider)?.trade == TradeType.plumbing;
+    final all = mockElectricianTasksForCurrentTradeWorker(isPlumber: isPlumber);
     final now = DateTime.now();
     final filtered = all.where((t) {
       if (_statusFilter != null && t.assignment.status != _statusFilter) return false;

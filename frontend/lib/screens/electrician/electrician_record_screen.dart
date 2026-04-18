@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/electrician_models.dart';
+import '../../data/mock_data.dart';
 import '../../models/job_site_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
@@ -361,8 +362,11 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     final summary = ref.watch(selectedSiteSummaryProvider);
     final queue = ref.watch(electricianQueueProvider).valueOrNull ?? const [];
     final queuedCount = queue.where((e) => e.status != QueueStatus.completed).length;
-    final recentAsync = ref.watch(recentFieldNotesProvider);
-    final recent = recentAsync.valueOrNull ?? const <RecentFieldNote>[];
+    final List<RecentFieldNote> recent = widget.host == FieldNoteHost.gcShell
+        ? mockRecentFieldNotesForSite('site_001')
+        : (ref.watch(currentUserProvider)?.trade == TradeType.plumbing
+            ? mockRecentFieldNotesForAuthor('Priya Nair')
+            : mockRecentFieldNotesForAuthor('Jordan Lee'));
 
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final screenH = MediaQuery.sizeOf(context).height;
@@ -384,7 +388,9 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
           ),
           const SizedBox(height: 6),
           Text(
-            summary == null ? 'No jobsite selected' : 'Current jobsite: ${summary.site.name}',
+            summary == null
+                ? 'Current jobsite: ${mockPrimaryJobsite.name}'
+                : 'Current jobsite: ${summary.site.name}',
             style: const TextStyle(color: Color(0xFF94A3B8)),
           ),
           if (queuedCount > 0 && !_offlineBannerDismissed) ...[
@@ -399,7 +405,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('☁', style: TextStyle(fontSize: 18)),
+                  const Icon(Icons.cloud_off_outlined, color: BVColors.primary, size: 22),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -427,7 +433,14 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
-                    label: Text(tag.chipLabel),
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(tag.chipIcon, size: 16, color: selected ? BVColors.onPrimary : BVColors.textSecondary),
+                        const SizedBox(width: 6),
+                        Text(tag.chipLabel),
+                      ],
+                    ),
                     selected: selected,
                     onSelected: (_) => setState(() => _selectedTag = tag),
                     selectedColor: BVColors.primary,
@@ -588,7 +601,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          '✦ Submit Update',
+                          'Submit Update',
                           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                         ),
                         SizedBox(width: 8),

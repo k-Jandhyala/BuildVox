@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import '../../models/electrician_models.dart';
 
 /// Which shell hosts the field note screen (focus + visibility rules).
@@ -6,8 +8,9 @@ enum FieldNoteHost {
   gcShell,
 }
 
-/// Describes one quick-tag chip on the field note screen.
+/// Describes one quick-tag chip on the field note screen (text + icon, no emoji).
 class FieldNoteTagDefinition {
+  final IconData chipIcon;
   final String chipLabel;
   final String shortTypeLabel;
   final ElectricianCategory category;
@@ -15,6 +18,7 @@ class FieldNoteTagDefinition {
   final bool isMaterialRequest;
 
   const FieldNoteTagDefinition({
+    required this.chipIcon,
     required this.chipLabel,
     required this.shortTypeLabel,
     required this.category,
@@ -28,7 +32,6 @@ class TradeFieldNoteLayout {
   final String title;
   final String placeholder;
   final List<FieldNoteTagDefinition> tags;
-  /// Default selected chip index (usually “Progress”).
   final int defaultTagIndex;
 
   const TradeFieldNoteLayout({
@@ -42,32 +45,37 @@ class TradeFieldNoteLayout {
     title: 'Field Note',
     defaultTagIndex: 3,
     placeholder:
-        'Describe the electrical work update...\n(Tip: tap 🎤 on your keyboard to speak)',
-    tags: const [
+        'Describe the electrical work update, materials, and any blockers.',
+    tags: [
       FieldNoteTagDefinition(
-        chipLabel: '🔌 Wiring',
+        chipIcon: Icons.bolt_rounded,
+        chipLabel: 'Wiring',
         shortTypeLabel: 'Wiring',
         category: ElectricianCategory.taskUpdate,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '🚧 Blocker',
+        chipIcon: Icons.block_rounded,
+        chipLabel: 'Blocker',
         shortTypeLabel: 'Blocker',
         category: ElectricianCategory.blocker,
         isBlocker: true,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '📦 Materials',
+        chipIcon: Icons.inventory_2_outlined,
+        chipLabel: 'Materials',
         shortTypeLabel: 'Materials',
         category: ElectricianCategory.materialRequest,
         isMaterialRequest: true,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '✅ Progress',
+        chipIcon: Icons.check_circle_outline_rounded,
+        chipLabel: 'Progress',
         shortTypeLabel: 'Progress',
         category: ElectricianCategory.taskUpdate,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '⚠️ Safety',
+        chipIcon: Icons.shield_outlined,
+        chipLabel: 'Safety',
         shortTypeLabel: 'Safety',
         category: ElectricianCategory.siteIssue,
       ),
@@ -78,68 +86,77 @@ class TradeFieldNoteLayout {
     title: 'Field Note',
     defaultTagIndex: 3,
     placeholder:
-        'Describe the plumbing update or issue...\n(Tip: tap 🎤 on your keyboard to speak)',
-    tags: const [
+        'Describe the plumbing update or issue, location, and severity.',
+    tags: [
       FieldNoteTagDefinition(
-        chipLabel: '🔩 Pipe Work',
+        chipIcon: Icons.home_repair_service_outlined,
+        chipLabel: 'Pipe Work',
         shortTypeLabel: 'Pipe Work',
         category: ElectricianCategory.taskUpdate,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '🚧 Blocker',
+        chipIcon: Icons.block_rounded,
+        chipLabel: 'Blocker',
         shortTypeLabel: 'Blocker',
         category: ElectricianCategory.blocker,
         isBlocker: true,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '📦 Materials',
+        chipIcon: Icons.inventory_2_outlined,
+        chipLabel: 'Materials',
         shortTypeLabel: 'Materials',
         category: ElectricianCategory.materialRequest,
         isMaterialRequest: true,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '✅ Progress',
+        chipIcon: Icons.check_circle_outline_rounded,
+        chipLabel: 'Progress',
         shortTypeLabel: 'Progress',
         category: ElectricianCategory.taskUpdate,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '💧 Leak/Issue',
+        chipIcon: Icons.water_drop_outlined,
+        chipLabel: 'Leak/Issue',
         shortTypeLabel: 'Leak/Issue',
         category: ElectricianCategory.siteIssue,
       ),
     ],
   );
 
-  /// GC “Post Update” tab — site-wide notices.
   static const TradeFieldNoteLayout gc = TradeFieldNoteLayout(
     title: 'Post Update',
     defaultTagIndex: 0,
     placeholder:
-        'Post a site-wide update or notice...\n(Tip: tap 🎤 on your keyboard to speak)',
-    tags: const [
+        'Post a site-wide update or notice for all trades.',
+    tags: [
       FieldNoteTagDefinition(
-        chipLabel: '📢 Site Notice',
+        chipIcon: Icons.campaign_outlined,
+        chipLabel: 'Site Notice',
         shortTypeLabel: 'Site Notice',
         category: ElectricianCategory.generalReport,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '🚧 Blocker',
+        chipIcon: Icons.block_rounded,
+        chipLabel: 'Blocker',
         shortTypeLabel: 'Blocker',
         category: ElectricianCategory.blocker,
         isBlocker: true,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '✅ Milestone',
+        chipIcon: Icons.flag_outlined,
+        chipLabel: 'Milestone',
         shortTypeLabel: 'Milestone',
         category: ElectricianCategory.taskUpdate,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '⚠️ Safety',
+        chipIcon: Icons.shield_outlined,
+        chipLabel: 'Safety',
         shortTypeLabel: 'Safety',
         category: ElectricianCategory.siteIssue,
       ),
       FieldNoteTagDefinition(
-        chipLabel: '📋 Inspection',
+        chipIcon: Icons.assignment_outlined,
+        chipLabel: 'Inspection',
         shortTypeLabel: 'Inspection',
         category: ElectricianCategory.generalReport,
       ),
