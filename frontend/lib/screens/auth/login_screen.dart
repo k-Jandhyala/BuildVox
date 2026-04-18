@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../router.dart' show homeRouteForUser;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/user_model.dart';
@@ -24,11 +26,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // Quick-fill buttons for demo accounts
   static const _demoAccounts = [
-    ('GC', 'gc@demo.com', Icons.construction_rounded),
-    ('Electrician', 'electrician@demo.com', Icons.bolt_rounded),
-    ('Plumber', 'plumber@demo.com', Icons.handyman_rounded),
-    ('Manager', 'manager@demo.com', Icons.assignment_rounded),
-    ('Admin', 'admin@demo.com', Icons.shield_rounded),
+    ('⚡ Electrician', 'electrician@demo.com', Icons.bolt_rounded),
+    ('🔧 Plumber', 'plumber@demo.com', Icons.handyman_rounded),
+    ('🏗️ GC', 'gc@demo.com', Icons.construction_rounded),
+    ('📊 Manager', 'manager@demo.com', Icons.assignment_rounded),
+    ('🛡️ Admin', 'admin@demo.com', Icons.shield_rounded),
   ];
 
   @override
@@ -53,23 +55,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
 
       setState(() => _loading = false);
-      _navigateForRole(user.role);
+      if (!mounted) return;
+      context.go(homeRouteForUser(user));
     } catch (e) {
       setState(() {
         _errorMessage = _friendlyError(e);
         _loading = false;
       });
     }
-  }
-
-  void _navigateForRole(UserRole role) {
-    final path = switch (role) {
-      UserRole.worker => '/worker',
-      UserRole.gc => '/gc',
-      UserRole.manager => '/manager',
-      UserRole.admin => '/admin',
-    };
-    context.go(path);
   }
 
   String _friendlyError(Object e) {

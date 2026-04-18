@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../widgets/account_menu_button.dart';
-import 'my_tasks_screen.dart';
-import 'submit_memo_screen.dart';
 
+import '../../widgets/account_menu_button.dart';
+import '../electrician/electrician_record_screen.dart';
+import 'my_tasks_screen.dart';
+
+/// Fallback home for workers who are not Electrician/Plumber (no trade shell).
 class WorkerHome extends ConsumerStatefulWidget {
   const WorkerHome({super.key});
 
@@ -16,14 +18,14 @@ class _WorkerHomeState extends ConsumerState<WorkerHome> {
 
   static const _pages = <Widget>[
     MyTasksScreen(),
-    SubmitMemoScreen(),
+    ElectricianRecordScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BuildVox'),
+        title: const Text('BuildVox · Worker'),
         actions: const [AccountMenuButton()],
       ),
       body: IndexedStack(
@@ -40,9 +42,9 @@ class _WorkerHomeState extends ConsumerState<WorkerHome> {
             label: 'My Tasks',
           ),
           NavigationDestination(
-            icon: Icon(Icons.mic_none_rounded),
-            selectedIcon: Icon(Icons.mic_rounded),
-            label: 'Voice Memo',
+            icon: Icon(Icons.edit_note_outlined),
+            selectedIcon: Icon(Icons.edit_note_rounded),
+            label: 'Field Note',
           ),
         ],
       ),

@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 
 import '../../models/electrician_models.dart';
 import '../../models/extracted_item_model.dart';
+import '../../models/user_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
 import '../../theme.dart';
 
@@ -100,19 +102,6 @@ class _ElectricianTasksScreenState extends ConsumerState<ElectricianTasksScreen>
               selected: _statusFilter == ItemStatus.done,
               onSelected: (_) => setState(() => _statusFilter = ItemStatus.done),
             ),
-            PopupMenuButton<ItemStatus?>(
-              onSelected: (v) => setState(() => _statusFilter = v),
-              itemBuilder: (c) => [
-                const PopupMenuItem<ItemStatus?>(value: null, child: Text('All Status')),
-                for (final s in ItemStatus.values)
-                  PopupMenuItem<ItemStatus?>(value: s, child: Text(s.label)),
-              ],
-              child: Chip(
-                label: Text(_statusFilter == null
-                    ? 'Status: All'
-                    : 'Status: ${_statusFilter!.label}'),
-              ),
-            ),
           ],
         ),
         const SizedBox(height: 14),
@@ -152,13 +141,14 @@ class _TaskGroup extends StatelessWidget {
   }
 }
 
-class _TaskCard extends StatelessWidget {
+class _TaskCard extends ConsumerWidget {
   final ElectricianTask task;
   const _TaskCard({required this.task});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final due = task.assignment.dueDate;
+    final isPlumber = ref.watch(currentUserProvider)?.trade == TradeType.plumbing;
     return InkWell(
       onTap: () => context.push('/${task.item.trade == 'plumbing' ? 'plumber' : 'electrician'}/task/${task.assignment.id}',
           extra: {'extractedItemId': task.item.id}),
@@ -218,6 +208,10 @@ class _TaskCard extends StatelessWidget {
                       children: [
                         _meta(task.assignment.status.label),
                         _meta(task.item.trade),
+                        if (isPlumber)
+                          _meta('Zone: ${task.item.unitOrArea ?? '—'}')
+                        else if (task.item.unitOrArea != null)
+                          _meta(task.item.unitOrArea!),
                         _meta(due == null
                             ? 'No due date'
                             : DateFormat('MMM d, h:mm a').format(due)),

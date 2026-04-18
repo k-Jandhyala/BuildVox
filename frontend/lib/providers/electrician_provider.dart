@@ -25,6 +25,12 @@ final tradeWorkerShellTabProvider = StateProvider<int>((ref) => 0);
 /// Increment to request focus on the Field Note text field (tab index 2).
 final recordScreenAutofocusTriggerProvider = StateProvider<int>((ref) => 0);
 
+/// GC shell bottom tab index (field note is tab index 2 — "Updates").
+final gcShellTabProvider = StateProvider<int>((ref) => 0);
+
+/// Manager shell: bump when switching to a screen with field note (if used).
+final managerShellTabProvider = StateProvider<int>((ref) => 0);
+
 final electricianEnabledProvider = Provider<bool>((ref) {
   final user = ref.watch(currentUserProvider);
   return user?.role == UserRole.worker && user?.trade == TradeType.electrical;

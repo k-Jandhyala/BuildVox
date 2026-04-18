@@ -10,71 +10,23 @@ import 'package:uuid/uuid.dart';
 
 import '../../models/electrician_models.dart';
 import '../../models/job_site_model.dart';
+import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/electrician_provider.dart';
 import '../../services/functions_service.dart';
 import '../../services/storage_service.dart';
 import '../../theme.dart';
-
-/// Quick-tag for field updates (maps to [ElectricianCategory] on submit).
-enum _FieldNoteTag {
-  blocker,
-  materials,
-  progress,
-  safety,
-  workOrder,
-}
-
-extension on _FieldNoteTag {
-  String get chipLabel {
-    switch (this) {
-      case _FieldNoteTag.blocker:
-        return '🚧 Blocker';
-      case _FieldNoteTag.materials:
-        return '📦 Materials';
-      case _FieldNoteTag.progress:
-        return '✅ Progress';
-      case _FieldNoteTag.safety:
-        return '⚠️ Safety';
-      case _FieldNoteTag.workOrder:
-        return '🔧 Work Order';
-    }
-  }
-
-  /// Short label for recent cards (no emoji).
-  String get shortTypeLabel {
-    switch (this) {
-      case _FieldNoteTag.blocker:
-        return 'Blocker';
-      case _FieldNoteTag.materials:
-        return 'Materials';
-      case _FieldNoteTag.progress:
-        return 'Progress';
-      case _FieldNoteTag.safety:
-        return 'Safety';
-      case _FieldNoteTag.workOrder:
-        return 'Work Order';
-    }
-  }
-
-  ElectricianCategory get category {
-    switch (this) {
-      case _FieldNoteTag.blocker:
-        return ElectricianCategory.blocker;
-      case _FieldNoteTag.materials:
-        return ElectricianCategory.materialRequest;
-      case _FieldNoteTag.progress:
-        return ElectricianCategory.taskUpdate;
-      case _FieldNoteTag.safety:
-        return ElectricianCategory.siteIssue;
-      case _FieldNoteTag.workOrder:
-        return ElectricianCategory.workOrder;
-    }
-  }
-}
+import '../worker/trade_field_note_config.dart';
 
 class ElectricianRecordScreen extends ConsumerStatefulWidget {
-  const ElectricianRecordScreen({super.key});
+  final TradeFieldNoteLayout layout;
+  final FieldNoteHost host;
+
+  const ElectricianRecordScreen({
+    super.key,
+    this.layout = TradeFieldNoteLayout.electrician,
+    this.host = FieldNoteHost.tradeWorker,
+  });
 
   @override
   ConsumerState<ElectricianRecordScreen> createState() =>
@@ -84,7 +36,7 @@ class ElectricianRecordScreen extends ConsumerStatefulWidget {
 class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScreen> {
   final TextEditingController _textController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  _FieldNoteTag _selectedTag = _FieldNoteTag.progress;
+  late FieldNoteTagDefinition _selectedTag;
   List<String> _photos = [];
   bool _submitting = false;
   bool _offlineBannerDismissed = false;
@@ -96,6 +48,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
   @override
   void initState() {
     super.initState();
+    _selectedTag =
+        widget.layout.tags[widget.layout.defaultTagIndex.clamp(0, widget.layout.tags.length - 1)];
     _textController.addListener(() => setState(() {}));
   }
 
@@ -215,7 +169,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     }
 
     final user = ref.read(currentUserProvider);
-    final trade = user?.trade?.name ?? 'electrical';
+    final trade = user?.trade?.name ??
+        (user?.role == UserRole.gc ? 'general_contractor' : 'electrical');
 
     setState(() => _submitting = true);
     HapticFeedback.lightImpact();
@@ -236,8 +191,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
         location: '',
         relatedTrade: trade,
         notes: '',
-        isBlocker: _selectedTag == _FieldNoteTag.blocker,
-        isMaterialRequest: _selectedTag == _FieldNoteTag.materials,
+        isBlocker: _selectedTag.isBlocker,
+        isMaterialRequest: _selectedTag.isMaterialRequest,
         attachedPhotos: photoUrls,
         expanded: false,
       );
@@ -264,7 +219,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
       _textController.clear();
       setState(() {
         _photos = [];
-        _selectedTag = _FieldNoteTag.progress;
+        _selectedTag = widget
+            .layout.tags[widget.layout.defaultTagIndex.clamp(0, widget.layout.tags.length - 1)];
         _submitting = false;
       });
       HapticFeedback.mediumImpact();
@@ -285,8 +241,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
           location: '',
           relatedTrade: trade,
           notes: '',
-          isBlocker: _selectedTag == _FieldNoteTag.blocker,
-          isMaterialRequest: _selectedTag == _FieldNoteTag.materials,
+          isBlocker: _selectedTag.isBlocker,
+          isMaterialRequest: _selectedTag.isMaterialRequest,
           attachedPhotos: photoUrls,
           expanded: false,
         );
@@ -320,7 +276,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
           _textController.clear();
           setState(() {
             _photos = [];
-            _selectedTag = _FieldNoteTag.progress;
+            _selectedTag = widget
+            .layout.tags[widget.layout.defaultTagIndex.clamp(0, widget.layout.tags.length - 1)];
             _submitting = false;
           });
           ScaffoldMessenger.of(context).showSnackBar(
@@ -369,6 +326,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
   Widget build(BuildContext context) {
     // Focus when this tab becomes visible (IndexedStack keeps all children built).
     ref.listen<int>(tradeWorkerShellTabProvider, (prev, next) {
+      if (widget.host != FieldNoteHost.tradeWorker) return;
       if (next == 2) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _focusNode.requestFocus();
@@ -378,13 +336,25 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
       }
     });
 
-    // Re-tap "Add Update" / center button while already on this tab.
+    ref.listen<int>(gcShellTabProvider, (prev, next) {
+      if (widget.host != FieldNoteHost.gcShell) return;
+      if (next == 2) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _focusNode.requestFocus();
+        });
+      } else {
+        _focusNode.unfocus();
+      }
+    });
+
+    // Re-tap quick action / center button while already on this tab.
     ref.listen<int>(recordScreenAutofocusTriggerProvider, (prev, next) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (ref.read(tradeWorkerShellTabProvider) == 2) {
-          _focusNode.requestFocus();
-        }
+        final onFieldNoteTab = widget.host == FieldNoteHost.tradeWorker
+            ? ref.read(tradeWorkerShellTabProvider) == 2
+            : ref.read(gcShellTabProvider) == 2;
+        if (onFieldNoteTab) _focusNode.requestFocus();
       });
     });
 
@@ -408,9 +378,9 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
         padding: const EdgeInsets.all(16),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
-          const Text(
-            'New Update',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+          Text(
+            widget.layout.title,
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
@@ -452,7 +422,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: _FieldNoteTag.values.map((tag) {
+              children: widget.layout.tags.map((tag) {
                 final selected = _selectedTag == tag;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -500,8 +470,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
                     isDense: true,
                     filled: true,
                     fillColor: _inputBg,
-                    hintText:
-                        'Describe what\'s happening on site...\n(Tip: tap the 🎤 on your keyboard to speak)',
+                    hintText: widget.layout.placeholder,
                     hintStyle: const TextStyle(color: _placeholder, fontSize: 16, height: 1.35),
                     contentPadding: const EdgeInsets.all(14),
                     border: OutlineInputBorder(

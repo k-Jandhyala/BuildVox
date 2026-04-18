@@ -7,6 +7,6 @@ class PlumberWarningsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ElectricianWarningsScreen();
+    return const ElectricianWarningsScreen(showLeakAlertsTab: true);
   }
 }

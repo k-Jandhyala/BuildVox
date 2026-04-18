@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/electrician_models.dart';
 import '../../providers/electrician_provider.dart';
 import '../../theme.dart';
+import '../../theme/design_tokens.dart';
 import '../../widgets/account_menu_button.dart';
+import '../../widgets/role_pill.dart';
 import 'plumber_home_screen.dart';
 import 'plumber_profile_screen.dart';
 import 'plumber_record_screen.dart';
@@ -33,15 +35,11 @@ class _PlumberShellScreenState extends ConsumerState<PlumberShellScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('BuildVox'),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: BVColors.primary.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: const Text('Plumber'),
+            const Text('BuildVox · '),
+            RolePill(
+              label: 'Plumber',
+              backgroundColor: BVRoleColors.plumber,
+              foregroundColor: Colors.white,
             ),
           ],
         ),

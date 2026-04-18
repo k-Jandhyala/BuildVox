@@ -27,6 +27,9 @@ class BVColors {
   static const Color medium = Color(0xFF2D9CDB);
   static const Color low = Color(0xFF2DC653);
 
+  /// Manager / GC accents
+  static const Color managerPurple = Color(0xFF9B59B6);
+
   // Task status
   static const Color pending = Color(0xFFA8B8C8);
   static const Color acknowledged = Color(0xFF2D9CDB);
@@ -95,7 +98,7 @@ ThemeData buildVoxTheme() {
       style: ElevatedButton.styleFrom(
         backgroundColor: BVColors.primary,
         foregroundColor: BVColors.onPrimary,
-        minimumSize: const Size(double.infinity, 54),
+        minimumSize: const Size(double.infinity, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         tapTargetSize: MaterialTapTargetSize.padded,
         textStyle: const TextStyle(
