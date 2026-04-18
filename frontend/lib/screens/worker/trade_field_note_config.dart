@@ -38,7 +38,7 @@ class TradeFieldNoteLayout {
     this.defaultTagIndex = 3,
   });
 
-  static final TradeFieldNoteLayout electrician = TradeFieldNoteLayout(
+  static const TradeFieldNoteLayout electrician = TradeFieldNoteLayout(
     title: 'Field Note',
     defaultTagIndex: 3,
     placeholder:
@@ -74,7 +74,7 @@ class TradeFieldNoteLayout {
     ],
   );
 
-  static final TradeFieldNoteLayout plumber = TradeFieldNoteLayout(
+  static const TradeFieldNoteLayout plumber = TradeFieldNoteLayout(
     title: 'Field Note',
     defaultTagIndex: 3,
     placeholder:
@@ -111,7 +111,7 @@ class TradeFieldNoteLayout {
   );
 
   /// GC “Post Update” tab — site-wide notices.
-  static final TradeFieldNoteLayout gc = TradeFieldNoteLayout(
+  static const TradeFieldNoteLayout gc = TradeFieldNoteLayout(
     title: 'Post Update',
     defaultTagIndex: 0,
     placeholder:
