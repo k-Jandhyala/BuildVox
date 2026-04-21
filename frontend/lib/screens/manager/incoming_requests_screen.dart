@@ -52,7 +52,9 @@ class IncomingRequestsScreen extends ConsumerWidget {
                     color: BVColors.blocker),
                 ...unassigned.map((item) => ExtractedItemCard(
                       item: item,
-                      trailing: _AssignButton(item: item),
+                      trailing: item.tier == TierType.materialRequest
+                          ? _MaterialDecisionButtons(item: item)
+                          : _AssignButton(item: item),
                     )),
               ],
               if (inProgress.isNotEmpty) ...[
@@ -194,6 +196,96 @@ class _AssignButtonState extends ConsumerState<_AssignButton> {
                   color: BVColors.primary),
             ),
           );
+  }
+}
+
+class _MaterialDecisionButtons extends ConsumerStatefulWidget {
+  final ExtractedItemModel item;
+  const _MaterialDecisionButtons({required this.item});
+
+  @override
+  ConsumerState<_MaterialDecisionButtons> createState() =>
+      _MaterialDecisionButtonsState();
+}
+
+class _MaterialDecisionButtonsState
+    extends ConsumerState<_MaterialDecisionButtons> {
+  bool _saving = false;
+
+  Future<void> _setStatus(ItemStatus status) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await DatabaseService.updateExtractedItemStatus(
+        itemId: widget.item.id,
+        status: status,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            status == ItemStatus.acknowledged
+                ? 'Material request approved'
+                : 'Material request denied',
+          ),
+          backgroundColor:
+              status == ItemStatus.acknowledged ? BVColors.done : BVColors.blocker,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not update material request: $e'),
+          backgroundColor: BVColors.blocker,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_saving) {
+      return const SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2, color: BVColors.primary),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      children: [
+        OutlinedButton(
+          onPressed: () => _setStatus(ItemStatus.cancelled),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: BVColors.blocker),
+            foregroundColor: BVColors.blocker,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text('Deny'),
+        ),
+        TextButton(
+          onPressed: () => _setStatus(ItemStatus.acknowledged),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text(
+            'Approve',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: BVColors.primary),
+          ),
+        ),
+      ],
+    );
   }
 }
 

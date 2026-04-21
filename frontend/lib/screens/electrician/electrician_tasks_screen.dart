@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../data/mock_data.dart';
 import '../../models/electrician_models.dart';
 import '../../models/extracted_item_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/electrician_provider.dart';
 import '../../theme.dart';
 
 class ElectricianTasksScreen extends ConsumerStatefulWidget {
@@ -26,94 +26,131 @@ class _ElectricianTasksScreenState extends ConsumerState<ElectricianTasksScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isPlumber = ref.watch(currentUserProvider)?.trade == TradeType.plumbing;
-    final all = mockElectricianTasksForCurrentTradeWorker(isPlumber: isPlumber);
-    final now = DateTime.now();
-    final filtered = all.where((t) {
-      if (_statusFilter != null && t.assignment.status != _statusFilter) return false;
-      if (_dueTodayOnly) {
-        final due = t.assignment.dueDate;
-        if (due == null ||
-            due.year != now.year ||
-            due.month != now.month ||
-            due.day != now.day) {
-          return false;
-        }
-      }
-      if (_blockersOnly && t.item.tier != TierType.issueOrBlocker) return false;
-      if (_materialOnly && t.item.tier != TierType.materialRequest) return false;
-      return true;
-    }).toList();
+    final tasksAsync = ref.watch(electricianTasksProvider);
 
-    final grouped = <ElectricianPriority, List<ElectricianTask>>{
-      ElectricianPriority.critical:
-          filtered.where((t) => t.priority == ElectricianPriority.critical).toList(),
-      ElectricianPriority.high:
-          filtered.where((t) => t.priority == ElectricianPriority.high).toList(),
-      ElectricianPriority.medium:
-          filtered.where((t) => t.priority == ElectricianPriority.medium).toList(),
-      ElectricianPriority.low:
-          filtered.where((t) => t.priority == ElectricianPriority.low).toList(),
-    };
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          'My Tasks (${filtered.length})',
-          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+    return tasksAsync.when(
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
         ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+      ),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Could not load tasks: $e',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: BVColors.blocker),
+          ),
+        ),
+      ),
+      data: (all) {
+        final now = DateTime.now();
+        final filtered = all.where((t) {
+          if (_statusFilter != null && t.assignment.status != _statusFilter) {
+            return false;
+          }
+          if (_dueTodayOnly) {
+            final due = t.assignment.dueDate;
+            if (due == null ||
+                due.year != now.year ||
+                due.month != now.month ||
+                due.day != now.day) {
+              return false;
+            }
+          }
+          if (_blockersOnly && t.item.tier != TierType.issueOrBlocker) {
+            return false;
+          }
+          if (_materialOnly && t.item.tier != TierType.materialRequest) {
+            return false;
+          }
+          return true;
+        }).toList();
+
+        final grouped = <ElectricianPriority, List<ElectricianTask>>{
+          ElectricianPriority.critical: filtered
+              .where((t) => t.priority == ElectricianPriority.critical)
+              .toList(),
+          ElectricianPriority.high:
+              filtered.where((t) => t.priority == ElectricianPriority.high).toList(),
+          ElectricianPriority.medium:
+              filtered.where((t) => t.priority == ElectricianPriority.medium).toList(),
+          ElectricianPriority.low:
+              filtered.where((t) => t.priority == ElectricianPriority.low).toList(),
+        };
+
+        final noFilters = !_dueTodayOnly &&
+            !_blockersOnly &&
+            !_materialOnly &&
+            _statusFilter == null;
+        final emptyMessage = all.isEmpty && noFilters
+            ? 'No tasks yet for this jobsite. Submit an update (blocker / material / schedule) or wait for an assignment from the GC.'
+            : 'No tasks match this filter';
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            ChoiceChip(
-              label: const Text('All'),
-              selected: !_dueTodayOnly && !_blockersOnly && !_materialOnly && _statusFilter == null,
-              onSelected: (_) => setState(() {
-                _dueTodayOnly = false;
-                _blockersOnly = false;
-                _materialOnly = false;
-                _statusFilter = null;
+            Text(
+              'My Tasks (${filtered.length})',
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('All'),
+                  selected: noFilters,
+                  onSelected: (_) => setState(() {
+                    _dueTodayOnly = false;
+                    _blockersOnly = false;
+                    _materialOnly = false;
+                    _statusFilter = null;
+                  }),
+                ),
+                FilterChip(
+                  label: const Text('Due Today'),
+                  selected: _dueTodayOnly,
+                  onSelected: (v) => setState(() => _dueTodayOnly = v),
+                ),
+                FilterChip(
+                  label: const Text('Blockers'),
+                  selected: _blockersOnly,
+                  onSelected: (v) => setState(() => _blockersOnly = v),
+                ),
+                FilterChip(
+                  label: const Text('Material Related'),
+                  selected: _materialOnly,
+                  onSelected: (v) => setState(() => _materialOnly = v),
+                ),
+                ChoiceChip(
+                  label: const Text('In Progress'),
+                  selected: _statusFilter == ItemStatus.inProgress,
+                  onSelected: (_) =>
+                      setState(() => _statusFilter = ItemStatus.inProgress),
+                ),
+                ChoiceChip(
+                  label: const Text('Completed'),
+                  selected: _statusFilter == ItemStatus.done,
+                  onSelected: (_) => setState(() => _statusFilter = ItemStatus.done),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (filtered.isEmpty)
+              _EmptyCard(text: emptyMessage)
+            else
+              ...grouped.entries.map((entry) {
+                if (entry.value.isEmpty) return const SizedBox.shrink();
+                return _TaskGroup(priority: entry.key, tasks: entry.value);
               }),
-            ),
-            FilterChip(
-              label: const Text('Due Today'),
-              selected: _dueTodayOnly,
-              onSelected: (v) => setState(() => _dueTodayOnly = v),
-            ),
-            FilterChip(
-              label: const Text('Blockers'),
-              selected: _blockersOnly,
-              onSelected: (v) => setState(() => _blockersOnly = v),
-            ),
-            FilterChip(
-              label: const Text('Material Related'),
-              selected: _materialOnly,
-              onSelected: (v) => setState(() => _materialOnly = v),
-            ),
-            ChoiceChip(
-              label: const Text('In Progress'),
-              selected: _statusFilter == ItemStatus.inProgress,
-              onSelected: (_) => setState(() => _statusFilter = ItemStatus.inProgress),
-            ),
-            ChoiceChip(
-              label: const Text('Completed'),
-              selected: _statusFilter == ItemStatus.done,
-              onSelected: (_) => setState(() => _statusFilter = ItemStatus.done),
-            ),
           ],
-        ),
-        const SizedBox(height: 14),
-        if (filtered.isEmpty)
-          const _EmptyCard(text: 'No tasks match this filter')
-        else
-          ...grouped.entries.map((entry) {
-            if (entry.value.isEmpty) return const SizedBox.shrink();
-            return _TaskGroup(priority: entry.key, tasks: entry.value);
-          }),
-      ],
+        );
+      },
     );
   }
 }

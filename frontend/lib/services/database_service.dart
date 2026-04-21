@@ -161,14 +161,35 @@ class DatabaseService {
     });
   }
 
-  static Stream<List<ExtractedItemModel>> managerItemsStream(
-      String companyId) {
+  static Stream<List<ExtractedItemModel>> managerItemsStream({
+      String? companyId,
+      required String userId,
+      List<String> assignedProjectIds = const [],
+  }) {
+    final assignedProjects = assignedProjectIds.toSet();
     return _c.from('extracted_items').stream(primaryKey: ['id']).map((rows) {
       final list = rows
           .where((r) {
-            final arr = r['recipient_company_ids'];
-            if (arr is! List) return false;
-            return arr.contains(companyId);
+            final companyArr = r['recipient_company_ids'];
+            final userArr = r['recipient_user_ids'];
+            final projectId = r['project_id']?.toString();
+            final tier = r['tier']?.toString();
+
+            final companyMatch = companyId != null &&
+                companyArr is List &&
+                companyArr.map((e) => e.toString()).contains(companyId);
+
+            final userMatch =
+                userArr is List && userArr.map((e) => e.toString()).contains(userId);
+
+            // Fallback for stale routing/demo IDs: managers should still see
+            // material requests on projects they are assigned to.
+            final assignedProjectMaterialFallback =
+                tier == 'material_request' &&
+                projectId != null &&
+                assignedProjects.contains(projectId);
+
+            return companyMatch || userMatch || assignedProjectMaterialFallback;
           })
           .map((r) =>
               ExtractedItemModel.fromJson(Map<String, dynamic>.from(r)))
@@ -194,6 +215,24 @@ class DatabaseService {
         await _c.from('extracted_items').select().eq('id', id).maybeSingle();
     if (row == null) return null;
     return ExtractedItemModel.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  static Future<void> updateExtractedItemStatus({
+    required String itemId,
+    required ItemStatus status,
+  }) async {
+    final statusValue = switch (status) {
+      ItemStatus.pending => 'pending',
+      ItemStatus.acknowledged => 'acknowledged',
+      ItemStatus.inProgress => 'in_progress',
+      ItemStatus.done => 'done',
+      ItemStatus.cancelled => 'cancelled',
+    };
+
+    await _c
+        .from('extracted_items')
+        .update({'status': statusValue})
+        .eq('id', itemId);
   }
 
   // ── Task Assignments ──────────────────────────────────────────────────────

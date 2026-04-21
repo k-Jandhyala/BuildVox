@@ -32,8 +32,12 @@ final gcProjectFeedProvider =
 final managerItemsProvider =
     StreamProvider<List<ExtractedItemModel>>((ref) {
   final user = ref.watch(currentUserProvider);
-  if (user?.companyId == null) return Stream.value([]);
-  return DatabaseService.managerItemsStream(user!.companyId!);
+  if (user == null) return Stream.value([]);
+  return DatabaseService.managerItemsStream(
+    companyId: user.companyId,
+    userId: user.uid,
+    assignedProjectIds: user.assignedProjectIds,
+  );
 });
 
 // ── Worker providers ──────────────────────────────────────────────────────────

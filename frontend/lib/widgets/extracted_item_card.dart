@@ -116,6 +116,7 @@ class _TradeTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (trade.isEmpty) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(

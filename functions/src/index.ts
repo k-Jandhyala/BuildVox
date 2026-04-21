@@ -23,6 +23,7 @@ import {
   validatePollVoiceMemoPayload,
   validateSubmitReviewedItemsPayload,
   validateEscalateTaskPayload,
+  validateRequestMaterialsPayload,
 } from "./validators";
 import { seedDemoData } from "./seed";
 import { getSupabase } from "./supabaseAdmin";
@@ -908,6 +909,107 @@ export const escalateTask = functions.https.onRequest(
     ).catch(console.error);
 
     jsonOk(res, { success: true, escalationId });
+  }
+);
+
+/** Worker submits a material request from task/update UI. */
+export const requestMaterials = functions.https.onRequest(
+  async (req, res): Promise<void> => {
+    setCors(res);
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
+    if (req.method !== "POST") {
+      jsonErr(res, 405, "Method not allowed");
+      return;
+    }
+
+    let uid: string;
+    try {
+      uid = await getSupabaseUserIdFromBearer(req);
+    } catch (e: any) {
+      jsonErr(res, 401, e.message || "Unauthorized");
+      return;
+    }
+
+    let payload: {
+      projectId: string;
+      siteId: string;
+      itemName: string;
+      quantity: number;
+      supplier: string;
+      notes?: string;
+      taskId?: string;
+      photoUrls?: string[];
+    };
+    try {
+      payload = validateRequestMaterialsPayload(readJsonBody(req));
+    } catch (e: any) {
+      jsonErr(res, 400, e.message);
+      return;
+    }
+
+    let userDoc;
+    try {
+      userDoc = await getUserDoc(uid);
+    } catch {
+      jsonErr(res, 404, "User profile not found");
+      return;
+    }
+
+    const supabase = getSupabase();
+
+    const { data: memoRow, error: memoErr } = await supabase
+      .from("voice_memos")
+      .insert({
+        created_by: uid,
+        user_role: userDoc.role,
+        company_id: userDoc.companyId ?? null,
+        project_id: payload.projectId,
+        site_id: payload.siteId,
+        transcript_status: "completed",
+        processing_status: "completed",
+        overall_summary: `Material request: ${payload.quantity} x ${payload.itemName}`,
+        detected_language: "en",
+      })
+      .select()
+      .single();
+
+    if (memoErr || !memoRow) {
+      jsonErr(res, 500, memoErr?.message || "Failed to create material request");
+      return;
+    }
+
+    const summary = `Need ${payload.quantity} ${payload.itemName} from ${payload.supplier}.`;
+    const note = payload.notes ? ` ${payload.notes}` : "";
+    const relatedTrade = userDoc.trade || "other";
+
+    const item = {
+      transcriptSegment: `${summary}${note}`.trim(),
+      summary,
+      category: "material_request",
+      priority: "medium",
+      location: "",
+      relatedTrade,
+      notes: payload.notes || "",
+      isBlocker: false,
+      isMaterialRequest: true,
+      attachedPhotos: payload.photoUrls || [],
+      sourceTaskId: payload.taskId || null,
+    };
+
+    const insertedCount = await persistClientPayloadItems({
+      supabase,
+      items: [item],
+      memoId: memoRow.id as string,
+      projectId: payload.projectId,
+      siteId: payload.siteId,
+      uid,
+      userTrade: relatedTrade,
+    });
+
+    jsonOk(res, { success: true, itemCount: insertedCount });
   }
 );
 

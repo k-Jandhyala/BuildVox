@@ -218,6 +218,7 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
               status: RecentFieldNoteStatus.processed,
             ),
           );
+      final wasMaterialRequest = _selectedTag.isMaterialRequest;
       _textController.clear();
       setState(() {
         _photos = [];
@@ -226,8 +227,11 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
         _submitting = false;
       });
       HapticFeedback.mediumImpact();
+      final successMsg = wasMaterialRequest
+          ? 'Material request sent to manager and GC'
+          : 'Update submitted';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Update submitted')),
+        SnackBar(content: Text(successMsg)),
       );
     } catch (e) {
       final err = e.toString();
@@ -376,12 +380,8 @@ class _ElectricianRecordScreenState extends ConsumerState<ElectricianRecordScree
     final summary = ref.watch(selectedSiteSummaryProvider);
     final queue = ref.watch(electricianQueueProvider).valueOrNull ?? const [];
     final queuedCount = queue.where((e) => e.status != QueueStatus.completed).length;
-    final List<RecentFieldNote> recent = widget.host == FieldNoteHost.gcShell ||
-            widget.host == FieldNoteHost.managerShell
-        ? mockRecentFieldNotesForSite('site_001')
-        : (ref.watch(currentUserProvider)?.trade == TradeType.plumbing
-            ? mockRecentFieldNotesForAuthor('Priya Nair')
-            : mockRecentFieldNotesForAuthor('Jordan Lee'));
+    final recentAsync = ref.watch(recentFieldNotesProvider);
+    final List<RecentFieldNote> recent = recentAsync.valueOrNull ?? const [];
 
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final screenH = MediaQuery.sizeOf(context).height;

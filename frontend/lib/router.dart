@@ -33,14 +33,25 @@ final routerProvider = Provider<GoRouter>((ref) {
       final session = ref.read(supabaseSessionProvider).valueOrNull;
       final isSignedIn = session != null;
       final isLoginRoute = state.uri.path == '/login';
+      final currentPath = state.uri.path;
 
       if (!isSignedIn) {
         return isLoginRoute ? null : '/login';
       }
 
-      if (isSignedIn && isLoginRoute) {
-        final userProfile = ref.read(currentUserProvider);
-        return homeRouteForUser(userProfile);
+      final userProfile = ref.read(currentUserProvider);
+      if (userProfile == null) {
+        // Profile stream can lag session refresh briefly; avoid mis-routing.
+        return null;
+      }
+
+      final home = homeRouteForUser(userProfile);
+      if (isLoginRoute) {
+        return home;
+      }
+
+      if (!isAllowedRouteForUser(path: currentPath, user: userProfile)) {
+        return home;
       }
 
       return null;
@@ -136,6 +147,25 @@ final routerProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+bool isAllowedRouteForUser({required String path, required UserModel user}) {
+  switch (user.role) {
+    case UserRole.worker:
+      if (user.trade == TradeType.electrical) {
+        return path == '/electrician' || path.startsWith('/electrician/');
+      }
+      if (user.trade == TradeType.plumbing) {
+        return path == '/plumber' || path.startsWith('/plumber/');
+      }
+      return path == '/worker' || path.startsWith('/worker/');
+    case UserRole.gc:
+      return path == '/gc' || path.startsWith('/gc/');
+    case UserRole.manager:
+      return path == '/manager' || path.startsWith('/manager/');
+    case UserRole.admin:
+      return path == '/admin' || path.startsWith('/admin/');
+  }
+}
 
 String _homeRouteForRole(UserRole? role) {
   switch (role) {

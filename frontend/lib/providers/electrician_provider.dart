@@ -93,7 +93,11 @@ final electricianTasksProvider = StreamProvider<List<ElectricianTask>>((ref) asy
       final item = await DatabaseService.getExtractedItem(task.extractedItemId);
       if (item == null) continue;
       final tradeName = user.trade?.name;
-      if (tradeName != null && tradeName.isNotEmpty && item.trade != tradeName) {
+      final ownSubmission = item.createdBy == user.uid;
+      if (!ownSubmission &&
+          tradeName != null &&
+          tradeName.isNotEmpty &&
+          item.trade != tradeName) {
         continue;
       }
       list.add(ElectricianTask(

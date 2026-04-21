@@ -112,7 +112,7 @@ describe("role flows — Gemini → routing → feed semantics", () => {
     expect(gcHighSignalFeed([row], { projectId: PROJECT_ID }).length).toBe(1);
   });
 
-  it("Scenario 5: material request routes to trade company (manager path), not GC-only", () => {
+  it("Scenario 5: material request routes to both manager path and GC", () => {
     const extraction = mockMaterialRequestExtraction();
     const item = extraction.items[0];
     expect(item.tier).toBe("material_request");
@@ -122,7 +122,8 @@ describe("role flows — Gemini → routing → feed semantics", () => {
       project,
       companies
     );
-    expect(recipientUserIds.length).toBe(0);
+    expect(recipientUserIds).toContain(USER_IDS.gc);
+    expect(recipientUserIds).toContain(USER_IDS.manager);
     expect(recipientCompanyIds).toContain(COMPANY_IDS.voltElectric);
 
     const row: ExtractedItemRow = {

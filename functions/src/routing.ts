@@ -83,6 +83,12 @@ export function computeRecipientRouting(
   const findCompanyByTrade = (trade: TradeType): CompanyDoc | undefined =>
     companies.find((c) => c.tradeType === trade);
 
+  const pushCompanyManagers = (companyId: string): void => {
+    const company = companies.find((c) => c.id === companyId);
+    if (!company) return;
+    recipientUserIds.push(...(company.managerUserIds || []));
+  };
+
   switch (item.tier) {
     case "issue_or_blocker": {
       recipientUserIds.push(...gcUserIds);
@@ -92,8 +98,13 @@ export function computeRecipientRouting(
     }
 
     case "material_request": {
+      // Business rule: managers and GC both need visibility on material shortages.
+      recipientUserIds.push(...gcUserIds);
       const company = findCompanyByTrade(item.recommended_company_type);
-      if (company) recipientCompanyIds.push(company.id);
+      if (company) {
+        recipientCompanyIds.push(company.id);
+        pushCompanyManagers(company.id);
+      }
       break;
     }
 
@@ -149,7 +160,38 @@ export async function determineRecipients(
     return { recipientUserIds: [], recipientCompanyIds: [] };
   }
 
-  return computeRecipientRouting(item, project, companies);
+  const base = computeRecipientRouting(item, project, companies);
+
+  // Fallback: infer live recipients from app_users assignment/roles.
+  // This protects against stale IDs in projects.gc_user_ids / companies.manager_user_ids.
+  const projectUsers = await loadUsersForProject(projectId).catch(() => []);
+  const inferredGcUserIds = projectUsers
+    .filter((u) => u.role === "gc")
+    .map((u) => u.uid);
+
+  const needsGcRouting =
+    item.tier === "issue_or_blocker" ||
+    item.tier === "schedule_change" ||
+    item.tier === "material_request" ||
+    item.needs_gc_attention;
+
+  if (needsGcRouting) {
+    base.recipientUserIds.push(...inferredGcUserIds);
+  }
+
+  if (item.tier === "material_request") {
+    // Material routing must survive stale companies.manager_user_ids rows.
+    // Any manager assigned to this project should receive visibility for trade materials.
+    const inferredManagerIds = projectUsers
+      .filter((u) => u.role === "manager")
+      .map((u) => u.uid);
+    base.recipientUserIds.push(...inferredManagerIds);
+  }
+
+  return {
+    recipientUserIds: [...new Set(base.recipientUserIds)],
+    recipientCompanyIds: [...new Set(base.recipientCompanyIds)],
+  };
 }
 
 export async function sendFcmNotifications(

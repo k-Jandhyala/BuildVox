@@ -261,3 +261,40 @@ export function validateEscalateTaskPayload(data: unknown): {
     details: d.details.trim(),
   };
 }
+
+export function validateRequestMaterialsPayload(data: unknown): {
+  projectId: string;
+  siteId: string;
+  itemName: string;
+  quantity: number;
+  supplier: string;
+  notes?: string;
+  taskId?: string;
+  photoUrls?: string[];
+} {
+  if (typeof data !== "object" || data === null) {
+    throw new Error("Invalid request payload");
+  }
+  const d = data as Record<string, unknown>;
+  if (!isString(d.projectId)) throw new Error("projectId is required");
+  if (!isString(d.siteId)) throw new Error("siteId is required");
+  if (!isString(d.itemName)) throw new Error("itemName is required");
+  const quantity = Number(d.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new Error("quantity must be a positive number");
+  }
+  if (!isString(d.supplier)) throw new Error("supplier is required");
+
+  return {
+    projectId: d.projectId,
+    siteId: d.siteId,
+    itemName: d.itemName.trim(),
+    quantity,
+    supplier: d.supplier.trim(),
+    notes: isString(d.notes) ? d.notes.trim() : undefined,
+    taskId: isString(d.taskId) ? d.taskId.trim() : undefined,
+    photoUrls: Array.isArray(d.photoUrls)
+      ? d.photoUrls.filter((x) => typeof x === "string") as string[]
+      : undefined,
+  };
+}

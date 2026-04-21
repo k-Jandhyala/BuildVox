@@ -77,7 +77,7 @@ describe("persist pipeline — routing + extracted_items + notifications (mock D
     expect(mgrNote).toBeDefined();
   });
 
-  it("material request: no GC user recipients; manager notification via company", async () => {
+  it("material request: routes to GC and manager notifications", async () => {
     const mock = createSmokeMockSupabase({
       projects: [projectRow],
       companies: companyRows,
@@ -98,9 +98,10 @@ describe("persist pipeline — routing + extracted_items + notifications (mock D
 
     const row = mock.extracted_items[0] as Record<string, unknown>;
     expect(row.tier).toBe("material_request");
-    expect((row.recipient_user_ids as string[]).length).toBe(0);
+    expect((row.recipient_user_ids as string[])).toContain(USER_IDS.gc);
+    expect((row.recipient_user_ids as string[])).toContain(USER_IDS.manager);
     expect(mock.notifications.some((n) => (n as { user_id?: string }).user_id === USER_IDS.gc)).toBe(
-      false
+      true
     );
     expect(
       mock.notifications.some((n) => (n as { user_id?: string }).user_id === USER_IDS.manager)
